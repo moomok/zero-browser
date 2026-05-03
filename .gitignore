@@ -1,0 +1,50 @@
+## .NET / Visual Studio / Rider build artifacts
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.idea/
+*.userprefs
+*.swp
+*.swo
+
+## NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## OS junk
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+## Test output
+TestResults/
+*.coverage
+*.coveragexml
+coverage*.json
+coverage*.xml
+coverage*.info
+
+## Avalonia
+*.dll.config
+
+## Local Chromium downloads (PuppeteerSharp)
+.local-chromium/
+puppeteer-cache/
+
+## Local app data (do NOT commit user profiles)
+**/AntiDetectBrowser/profiles/
+**/AntiDetectBrowser/data.db
+**/AntiDetectBrowser/data.db-journal
+**/AntiDetectBrowser/master.key
+
+## Logs
+*.log
+logs/
