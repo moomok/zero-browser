@@ -13,6 +13,10 @@ PROJ="$REPO_ROOT/src/ZeroBrowser.App/ZeroBrowser.App.csproj"
 PUBLISH_DIR="$REPO_ROOT/src/ZeroBrowser.App/bin/Release/net8.0/$RID/publish"
 
 mkdir -p "$OUT_DIR"
+# Resolve to absolute path so the `zip` subshell (which `cd`s into the publish
+# dir) writes the archive to the right place, not to a relative path inside
+# $PUBLISH_DIR. `tar -czf` resolves its output before `-C`, but `zip` does not.
+OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 
 echo "==> Publishing self-contained $RID build..."
 dotnet publish "$PROJ" \

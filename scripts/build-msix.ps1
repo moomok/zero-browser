@@ -64,14 +64,20 @@ $manifestText = Get-Content $manifest -Raw
 $manifestText = $manifestText -replace 'Version="0\.1\.0\.0"', "Version=""$Version"""
 Set-Content -Path $manifestStaged -Value $manifestText -Encoding UTF8
 
-# Locate Windows SDK tools
+# Locate Windows SDK tools — prefer the highest installed SDK version. Sorting
+# by [Version] (numeric) instead of by string makes 10.0.22621.0 win over
+# 10.0.19041.0 on runners that have several SDKs side by side.
 function Get-SdkTool($name) {
     $candidates = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin" `
                                 -Recurse -Filter $name -ErrorAction SilentlyContinue |
-                  Where-Object { $_.FullName -match "x64\\$name$" } |
-                  Sort-Object FullName -Descending
+                  Where-Object { $_.FullName -match "x64\\$name$" }
     if (-not $candidates) { throw "$name not found in Windows SDK." }
-    return $candidates[0].FullName
+    $best = $candidates | Sort-Object {
+        # Path looks like "...\Windows Kits\10\bin\10.0.22621.0\x64\foo.exe"
+        $verDir = (Split-Path -Path (Split-Path $_.FullName -Parent) -Leaf)
+        try { [Version]$verDir } catch { [Version]"0.0.0.0" }
+    } -Descending | Select-Object -First 1
+    return $best.FullName
 }
 $makeAppx  = Get-SdkTool "MakeAppx.exe"
 $signTool  = Get-SdkTool "signtool.exe"
@@ -90,6 +96,20 @@ if ($env:SIGNING_PFX_BASE64 -and $env:SIGNING_PFX_PWD) {
     Write-Host "  Using external PFX from env."
     [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:SIGNING_PFX_BASE64))
     $pfxPwd = ConvertTo-SecureString $env:SIGNING_PFX_PWD -AsPlainText -Force
+    # Export the public certificate from the PFX so the release artifact still
+    # contains a .cer file. End users that already trust a public CA-issued
+    # cert will not need this, but if it's an internally-issued cert they
+    # still need to import it once. Either way, parity with the self-signed
+    # branch keeps the artifact list deterministic.
+    $x509 = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+        $pfxPath, $pfxPwd,
+        [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet)
+    try {
+        [IO.File]::WriteAllBytes($cerPath,
+            $x509.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+    } finally {
+        $x509.Dispose()
+    }
 } else {
     Write-Host "  No external PFX — generating self-signed cert (CN=Zero Browser)."
     $cert = New-SelfSignedCertificate `
