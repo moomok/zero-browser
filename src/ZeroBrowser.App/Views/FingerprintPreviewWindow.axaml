@@ -1,0 +1,52 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ZeroBrowser.App.ViewModels"
+        x:Class="ZeroBrowser.App.Views.FingerprintPreviewWindow"
+        x:DataType="vm:FingerprintPreviewViewModel"
+        Width="720" Height="640"
+        WindowStartupLocation="CenterOwner"
+        Icon="/Assets/icon.png"
+        Title="{Binding Title}">
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+        <TextBlock Grid.Row="0"
+                   Text="{Binding Title}"
+                   FontSize="18" FontWeight="SemiBold"
+                   Margin="0,0,0,12"/>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Groups}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:FingerprintGroup">
+                        <Border BorderBrush="#22000000" BorderThickness="1" CornerRadius="6"
+                                Padding="12" Margin="0,0,0,10">
+                            <StackPanel>
+                                <TextBlock Text="{Binding Header}"
+                                           FontWeight="SemiBold" FontSize="14"
+                                           Margin="0,0,0,8"/>
+                                <ItemsControl ItemsSource="{Binding Rows}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:FingerprintRow">
+                                            <Grid ColumnDefinitions="180,*" Margin="0,2">
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding Label}"
+                                                           Opacity="0.7"
+                                                           FontSize="12"/>
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding Value}"
+                                                           FontSize="12"
+                                                           TextWrapping="Wrap"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8"
+                    HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="Close" Click="OnCloseClick" />
+        </StackPanel>
+    </Grid>
+</Window>

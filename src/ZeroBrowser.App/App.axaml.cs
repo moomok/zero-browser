@@ -1,10 +1,12 @@
-using ZeroBrowser.App.ViewModels;
-using ZeroBrowser.Browser;
-using ZeroBrowser.Core.Fingerprint;
-using ZeroBrowser.Storage.Sqlite;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using ZeroBrowser.App.ViewModels;
+using ZeroBrowser.App.Views;
+using ZeroBrowser.Browser;
+using ZeroBrowser.Core.Fingerprint;
+using ZeroBrowser.Storage.Crypto;
+using ZeroBrowser.Storage.Sqlite;
 
 namespace ZeroBrowser.App;
 
@@ -26,16 +28,34 @@ public partial class App : Application
                 "ZeroBrowser");
             Directory.CreateDirectory(appDataRoot);
 
-            var dbPath = Path.Combine(appDataRoot, "data.db");
-            var profileRepo = new ProfileRepository(dbPath);
-            var generator = new FingerprintGenerator();
-            var injector = new FingerprintInjector();
-            var launcher = new PuppeteerBrowserLauncher(injector);
+            var masterKeyPath = Path.Combine(appDataRoot, "master.key");
+            var masterKey = new MasterKey(masterKeyPath);
 
-            desktop.MainWindow = new MainWindow
+            // Show unlock window first. Once unlocked, swap in the main window.
+            var unlockVm = new UnlockWindowViewModel(masterKey);
+            var unlockWindow = new UnlockWindow { DataContext = unlockVm };
+
+            unlockVm.Unlocked += () =>
             {
-                DataContext = new MainWindowViewModel(profileRepo, generator, launcher)
+                var box = unlockVm.UnlockedBox!;
+                var dbPath = Path.Combine(appDataRoot, "data.db");
+                var profileRepo = new ProfileRepository(dbPath);
+                var proxyRepo   = new ProxyRepository(dbPath, box);
+                var generator = new FingerprintGenerator();
+                var injector = new FingerprintInjector();
+                var launcher = new PuppeteerBrowserLauncher(injector);
+
+                var mainWindow = new MainWindow
+                {
+                    DataContext = new MainWindowViewModel(profileRepo, proxyRepo, generator, launcher)
+                };
+
+                desktop.MainWindow = mainWindow;
+                mainWindow.Show();
+                unlockWindow.Close();
             };
+
+            desktop.MainWindow = unlockWindow;
         }
 
         base.OnFrameworkInitializationCompleted();

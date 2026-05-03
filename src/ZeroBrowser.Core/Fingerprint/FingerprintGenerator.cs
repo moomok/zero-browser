@@ -17,15 +17,18 @@ public sealed class FingerprintGenerator
         _options = options ?? FingerprintGeneratorOptions.Default;
     }
 
-    public FingerprintProfile Generate(string seed)
+    public FingerprintProfile Generate(string seed) => Generate(seed, _options.PinnedOs);
+
+    /// <summary>Generate a fingerprint, optionally overriding OS pin (used by per-profile editor).</summary>
+    public FingerprintProfile Generate(string seed, OperatingSystemKind? pinnedOs)
     {
         if (string.IsNullOrWhiteSpace(seed))
             throw new ArgumentException("seed must be non-empty", nameof(seed));
 
         var rnd = new SeededRandom(seed);
 
-        // OS — pinned if user requested it, otherwise pick from allowed set.
-        var os = _options.PinnedOs ?? rnd.Pick(_options.AllowedOperatingSystems);
+        // OS — pinned if requested, otherwise pick from allowed set.
+        var os = pinnedOs ?? _options.PinnedOs ?? rnd.Pick(_options.AllowedOperatingSystems);
 
         // Browser version
         var browserVersion = rnd.Pick(FingerprintDataset.ChromeVersions);

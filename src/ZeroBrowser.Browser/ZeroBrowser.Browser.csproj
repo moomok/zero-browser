@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ZeroBrowser.Core\ZeroBrowser.Core.csproj" />
+    <ProjectReference Include="..\ZeroBrowser.Storage\ZeroBrowser.Storage.csproj" />
   </ItemGroup>
 
   <ItemGroup>

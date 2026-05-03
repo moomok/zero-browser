@@ -1,5 +1,6 @@
 using ZeroBrowser.Core.Fingerprint;
 using ZeroBrowser.Core.Models;
+using ZeroBrowser.Storage.Cookies;
 using PuppeteerSharp;
 
 namespace ZeroBrowser.Browser;
@@ -86,6 +87,14 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
         var patchScript = _injector.BuildPatchScript(request.Fingerprint);
         await page.EvaluateFunctionOnNewDocumentAsync($"() => {{ {patchScript} }}").ConfigureAwait(false);
 
+        // Apply imported cookies (if any) before first navigation.
+        var imported = CookieStore.Load(request.Profile.StoragePath);
+        if (imported.Count > 0)
+        {
+            var cookieParams = imported.Select(ToCookieParam).ToArray();
+            await page.SetCookieAsync(cookieParams).ConfigureAwait(false);
+        }
+
         if (!string.IsNullOrWhiteSpace(request.StartUrl))
         {
             await page.GoToAsync(request.StartUrl).ConfigureAwait(false);
@@ -93,6 +102,24 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
 
         return new PuppeteerBrowserSession(request.Profile, browser);
     }
+
+    private static CookieParam ToCookieParam(CookieRecord c) => new()
+    {
+        Name      = c.Name,
+        Value     = c.Value,
+        Domain    = c.Domain,
+        Path      = c.Path,
+        HttpOnly  = c.HttpOnly ?? false,
+        Secure    = c.Secure ?? false,
+        SameSite  = c.SameSite switch
+        {
+            "Lax"    => SameSite.Lax,
+            "Strict" => SameSite.Strict,
+            "None"   => SameSite.None,
+            _        => SameSite.Default
+        },
+        Expires   = c.ExpiresUnix
+    };
 }
 
 internal sealed class PuppeteerBrowserSession : IBrowserSession
