@@ -86,40 +86,57 @@ dotnet test
 dotnet run --project src/ZeroBrowser.App
 ```
 
-### Build standalone .exe / app bundle
+### Build standalone executable / installer
 
-#### Windows (single-file)
+Cara cepat: pakai script bantu di `scripts/`.
 
+#### Windows MSIX + portable zip
 ```powershell
-dotnet publish src/ZeroBrowser.App `
-    -c Release `
-    -r win-x64 `
-    --self-contained `
-    -p:PublishSingleFile=true `
-    -o publish/win-x64
+# Jalankan di Windows. Output di artifacts/:
+#   ZeroBrowser-x64-<ver>.msix      (installer, perlu trust .cer dulu)
+#   ZeroBrowser-x64-<ver>.cer       (public cert untuk import sekali ke Trusted Root)
+#   ZeroBrowser-x64-<ver>-portable.zip
+./scripts/build-msix.ps1 -Version "0.1.0.0"
 ```
 
-#### macOS (.app bundle, butuh tooling tambahan)
+#### Linux / macOS portable archive
+```bash
+./scripts/build-portable.sh linux-x64  0.1.0  artifacts
+./scripts/build-portable.sh osx-arm64  0.1.0  artifacts   # Apple Silicon
+./scripts/build-portable.sh osx-x64    0.1.0  artifacts   # Intel
+```
+
+Atau langsung `dotnet publish` (manual, tanpa archive):
 
 ```bash
-dotnet publish src/ZeroBrowser.App \
-    -c Release \
-    -r osx-arm64 \
-    --self-contained \
-    -o publish/osx-arm64
-# untuk .app bundle proper, gunakan tool seperti `Microsoft.NET.Sdk.macOS`
-# atau bungkus binary ke .app secara manual
+dotnet publish src/ZeroBrowser.App -c Release -r linux-x64 --self-contained
 ```
 
-#### Linux
+`-r` bisa diganti ke `win-x64`, `osx-x64`, `osx-arm64`, `linux-x64`, `linux-arm64`.
 
-```bash
-dotnet publish src/ZeroBrowser.App \
-    -c Release \
-    -r linux-x64 \
-    --self-contained \
-    -o publish/linux-x64
-```
+---
+
+## Install dari GitHub Release
+
+Pipeline `.github/workflows/release.yml` otomatis bikin **draft Release** setiap kali tag `v*.*.*` di-push (atau via `workflow_dispatch`). Lihat [Releases](https://github.com/moomok/zero-browser/releases).
+
+### Windows MSIX (recommended)
+1. Download `ZeroBrowser-x64-*.cer` dan `ZeroBrowser-x64-*.msix`.
+2. Klik kanan `.cer` → **Install Certificate** → **Local Machine** → **Place all certificates in the following store** → **Trusted Root Certification Authorities** → OK. _(Sekali doang. Hanya perlu karena MSIX di-sign self-signed; kalau pakai cert komersial step ini gak perlu.)_
+3. Dobel-klik `.msix` → **Install**.
+4. Cari **Zero Browser** di Start Menu.
+
+### Windows portable (no install)
+1. Download `ZeroBrowser-x64-*-portable.zip`.
+2. Extract, dobel-klik `ZeroBrowser.App.exe`.
+
+### macOS portable
+1. Download `ZeroBrowser-osx-x64-*.tar.gz` (Intel) atau `ZeroBrowser-osx-arm64-*.tar.gz` (Apple Silicon).
+2. Extract, run `./ZeroBrowser.App`. Pertama kali mungkin perlu klik kanan → **Open** karena binary belum ditandatangani Apple.
+
+### Linux portable
+1. Download `ZeroBrowser-linux-x64-*.tar.gz`.
+2. Extract, run `./ZeroBrowser.App`. Library yang dibutuhkan: `libicu`, `libssl`, `libsecret-1`, `libfontconfig`.
 
 ---
 

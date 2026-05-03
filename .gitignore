@@ -48,3 +48,6 @@ puppeteer-cache/
 ## Logs
 *.log
 logs/
+
+## Release pipeline staging
+installer/windows/_stage/

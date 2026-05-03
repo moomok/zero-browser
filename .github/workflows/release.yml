@@ -1,0 +1,151 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g. 0.1.0). A draft release with this tag will be created.'
+        required: true
+        default: '0.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  resolve-version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.set.outputs.version }}
+      tag:     ${{ steps.set.outputs.tag }}
+    steps:
+      - id: set
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ inputs.version }}"
+            TAG="v${VERSION}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION="${TAG#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
+
+  build-windows:
+    name: Build Windows MSIX + portable (x64)
+    needs: resolve-version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: 8.0.x }
+
+      - name: Build MSIX + portable zip
+        shell: pwsh
+        run: ./scripts/build-msix.ps1 -Version "${{ needs.resolve-version.outputs.version }}.0"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: artifacts/*
+          if-no-files-found: error
+
+  build-portable-linux:
+    name: Build Linux portable (x64)
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: 8.0.x }
+
+      - name: Build portable tarball
+        run: ./scripts/build-portable.sh linux-x64 "${{ needs.resolve-version.outputs.version }}" artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64
+          path: artifacts/*
+          if-no-files-found: error
+
+  build-portable-macos:
+    name: Build macOS portable (${{ matrix.rid }})
+    needs: resolve-version
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [osx-x64, osx-arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: 8.0.x }
+
+      - name: Build portable tarball
+        run: ./scripts/build-portable.sh ${{ matrix.rid }} "${{ needs.resolve-version.outputs.version }}" artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.rid }}
+          path: artifacts/*
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs:
+      - resolve-version
+      - build-windows
+      - build-portable-linux
+      - build-portable-macos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p release
+          find artifacts -type f -mindepth 2 -maxdepth 3 -exec cp -v {} release/ \;
+          ls -lh release
+
+      - name: Create / update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve-version.outputs.tag }}
+          name: Zero Browser ${{ needs.resolve-version.outputs.tag }}
+          draft: true
+          generate_release_notes: true
+          files: release/*
+          body: |
+            ## Install
+
+            ### Windows (MSIX) — recommended
+            1. Download `ZeroBrowser-x64-*.cer` and `ZeroBrowser-x64-*.msix`.
+            2. Right-click the `.cer` → **Install Certificate** → **Local Machine** → **Place all certificates in the following store** → **Trusted Root Certification Authorities** → OK.  
+               (One-time step. Required because the MSIX is self-signed; replace with a commercial code-signing cert to skip this.)
+            3. Double-click the `.msix` → **Install**.
+            4. Launch **Zero Browser** from Start Menu.
+
+            ### Windows (portable) — no install needed
+            1. Download `ZeroBrowser-x64-*-portable.zip`.
+            2. Extract anywhere and double-click `ZeroBrowser.App.exe`.
+
+            ### macOS (portable)
+            1. Download `ZeroBrowser-osx-x64-*.tar.gz` (Intel) or `ZeroBrowser-osx-arm64-*.tar.gz` (Apple Silicon).
+            2. Extract and run `ZeroBrowser.App`. First launch you may need to right-click → **Open** because the binary is unsigned.
+
+            ### Linux (portable)
+            1. Download `ZeroBrowser-linux-x64-*.tar.gz`.
+            2. Extract and run `./ZeroBrowser.App`. Required system libs: `libicu`, `libssl`, `libsecret-1`, `libfontconfig`.
+
+            ## Notes
+            - First launch of a profile downloads ~150 MB of Chromium for Testing into your local app data folder.
+            - Master password protects the SQLite store (Argon2id KDF + AES-256-GCM).
+            - Multi-platform native UI (Avalonia + Skia).
