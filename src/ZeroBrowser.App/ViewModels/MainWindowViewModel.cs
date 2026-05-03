@@ -14,6 +14,7 @@ namespace ZeroBrowser.App.ViewModels;
 public sealed partial class MainWindowViewModel : ObservableObject
 {
     private readonly ProfileRepository _profiles;
+    private readonly ProxyRepository _proxies;
     private readonly FingerprintGenerator _generator;
     private readonly IBrowserLauncher _launcher;
 
@@ -21,9 +22,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty] private string _statusMessage = "Ready";
 
-    public MainWindowViewModel(ProfileRepository profiles, FingerprintGenerator generator, IBrowserLauncher launcher)
+    public MainWindowViewModel(ProfileRepository profiles, ProxyRepository proxies, FingerprintGenerator generator, IBrowserLauncher launcher)
     {
         _profiles  = profiles;
+        _proxies   = proxies;
         _generator = generator;
         _launcher  = launcher;
         Reload();
@@ -68,10 +70,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         StatusMessage = $"Launching {item.Name}…";
         try
         {
+            var proxy = item.Profile.ProxyId is { } id ? _proxies.Get(id) : null;
             var session = await _launcher.LaunchAsync(new LaunchRequest(
                 item.Profile,
                 item.Fingerprint,
-                Proxy: null,
+                Proxy: proxy,
                 StartUrl: "https://abrahamjuliot.github.io/creepjs/",
                 Headless: false));
             item.Status = session.IsRunning ? "running" : "exited";
@@ -114,5 +117,23 @@ public sealed partial class MainWindowViewModel : ObservableObject
         if (item is null) return;
         _profiles.Delete(item.Profile.Id);
         Reload();
+    }
+
+    [RelayCommand]
+    private void OpenProxyManager()
+    {
+        var window = new ProxyManagerWindow
+        {
+            DataContext = new ProxyManagerViewModel(_proxies)
+        };
+        if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
+            && desktop.MainWindow is Window owner)
+        {
+            window.ShowDialog(owner);
+        }
+        else
+        {
+            window.Show();
+        }
     }
 }

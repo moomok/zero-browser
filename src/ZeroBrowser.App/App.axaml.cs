@@ -37,15 +37,17 @@ public partial class App : Application
 
             unlockVm.Unlocked += () =>
             {
+                var box = unlockVm.UnlockedBox!;
                 var dbPath = Path.Combine(appDataRoot, "data.db");
                 var profileRepo = new ProfileRepository(dbPath);
+                var proxyRepo   = new ProxyRepository(dbPath, box);
                 var generator = new FingerprintGenerator();
                 var injector = new FingerprintInjector();
                 var launcher = new PuppeteerBrowserLauncher(injector);
 
                 var mainWindow = new MainWindow
                 {
-                    DataContext = new MainWindowViewModel(profileRepo, generator, launcher)
+                    DataContext = new MainWindowViewModel(profileRepo, proxyRepo, generator, launcher)
                 };
 
                 desktop.MainWindow = mainWindow;

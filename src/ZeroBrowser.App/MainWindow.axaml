@@ -12,6 +12,7 @@
     <!-- Toolbar -->
     <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,12">
       <Button Content="New profile"  Command="{Binding NewProfileCommand}" />
+      <Button Content="Proxies"      Command="{Binding OpenProxyManagerCommand}" />
       <Button Content="Reload"       Command="{Binding ReloadCommand}" />
       <TextBlock Text="Zero Browser — multi-profile fingerprint manager"
                  VerticalAlignment="Center" Margin="20,0,0,0"
