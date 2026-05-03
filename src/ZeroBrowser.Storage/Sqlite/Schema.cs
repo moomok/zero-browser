@@ -13,11 +13,15 @@ public static class Schema
             group_id          TEXT,
             tags              TEXT NOT NULL DEFAULT '[]',
             fingerprint_seed  TEXT NOT NULL,
+            pinned_os         TEXT,
             proxy_id          TEXT,
             storage_path      TEXT NOT NULL,
             created_at        INTEGER NOT NULL,
             last_used_at      INTEGER
         );
+
+        -- Migration: add pinned_os column if upgrading from an earlier schema.
+        -- SQLite ignores 'duplicate column' inside try/catch; we handle that in code instead.
 
         CREATE TABLE IF NOT EXISTS proxies (
             id            TEXT PRIMARY KEY,
@@ -42,5 +46,17 @@ public static class Schema
         using var cmd = conn.CreateCommand();
         cmd.CommandText = CreateTables;
         cmd.ExecuteNonQuery();
+
+        // Best-effort migration: add pinned_os if it was missing on an older DB.
+        try
+        {
+            using var alter = conn.CreateCommand();
+            alter.CommandText = "ALTER TABLE profiles ADD COLUMN pinned_os TEXT";
+            alter.ExecuteNonQuery();
+        }
+        catch (SqliteException)
+        {
+            // Column already exists — fine.
+        }
     }
 }

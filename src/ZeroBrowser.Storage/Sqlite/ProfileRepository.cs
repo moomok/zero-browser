@@ -43,9 +43,9 @@ public sealed class ProfileRepository
         conn.Execute(
             """
             INSERT INTO profiles
-              (id, name, notes, group_id, tags, fingerprint_seed, proxy_id, storage_path, created_at, last_used_at)
+              (id, name, notes, group_id, tags, fingerprint_seed, pinned_os, proxy_id, storage_path, created_at, last_used_at)
             VALUES
-              (@Id, @Name, @Notes, @GroupId, @Tags, @FingerprintSeed, @ProxyId, @StoragePath, @CreatedAt, @LastUsedAt);
+              (@Id, @Name, @Notes, @GroupId, @Tags, @FingerprintSeed, @PinnedOs, @ProxyId, @StoragePath, @CreatedAt, @LastUsedAt);
             """, new
             {
                 Id = p.Id.ToString(),
@@ -54,6 +54,7 @@ public sealed class ProfileRepository
                 p.GroupId,
                 Tags = JsonSerializer.Serialize(p.Tags),
                 p.FingerprintSeed,
+                PinnedOs = p.PinnedOs?.ToString(),
                 ProxyId = p.ProxyId?.ToString(),
                 p.StoragePath,
                 CreatedAt = p.CreatedAt.ToUnixTimeSeconds(),
@@ -71,6 +72,8 @@ public sealed class ProfileRepository
               notes = @Notes,
               group_id = @GroupId,
               tags = @Tags,
+              fingerprint_seed = @FingerprintSeed,
+              pinned_os = @PinnedOs,
               proxy_id = @ProxyId,
               last_used_at = @LastUsedAt
             WHERE id = @Id;
@@ -81,6 +84,8 @@ public sealed class ProfileRepository
                 p.Notes,
                 p.GroupId,
                 Tags = JsonSerializer.Serialize(p.Tags),
+                p.FingerprintSeed,
+                PinnedOs = p.PinnedOs?.ToString(),
                 ProxyId = p.ProxyId?.ToString(),
                 LastUsedAt = p.LastUsedAt?.ToUnixTimeSeconds()
             });
@@ -100,6 +105,7 @@ public sealed class ProfileRepository
         GroupId         = row.group_id,
         Tags            = JsonSerializer.Deserialize<List<string>>(row.tags ?? "[]") ?? new(),
         FingerprintSeed = row.fingerprint_seed,
+        PinnedOs        = row.pinned_os is null ? null : Enum.Parse<OperatingSystemKind>(row.pinned_os, ignoreCase: true),
         ProxyId         = row.proxy_id is null ? null : Guid.Parse(row.proxy_id),
         StoragePath     = row.storage_path,
         CreatedAt       = DateTimeOffset.FromUnixTimeSeconds(row.created_at),
@@ -108,6 +114,6 @@ public sealed class ProfileRepository
 
     private sealed record ProfileRow(
         string id, string name, string? notes, string? group_id,
-        string? tags, string fingerprint_seed, string? proxy_id,
+        string? tags, string fingerprint_seed, string? pinned_os, string? proxy_id,
         string storage_path, long created_at, long? last_used_at);
 }

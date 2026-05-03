@@ -7,11 +7,13 @@
         x:Class="ZeroBrowser.App.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Width="1100" Height="650"
+        Icon="/Assets/icon.png"
         Title="Zero Browser">
   <Grid RowDefinitions="Auto,*,Auto" Margin="12">
     <!-- Toolbar -->
     <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,12">
       <Button Content="New profile"  Command="{Binding NewProfileCommand}" />
+      <Button Content="Proxies"      Command="{Binding OpenProxyManagerCommand}" />
       <Button Content="Reload"       Command="{Binding ReloadCommand}" />
       <TextBlock Text="Zero Browser — multi-profile fingerprint manager"
                  VerticalAlignment="Center" Margin="20,0,0,0"
@@ -40,6 +42,15 @@
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:ProfileItemViewModel">
                 <StackPanel Orientation="Horizontal" Spacing="6" Margin="6">
+                  <Button Content="Preview"
+                          Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).PreviewFingerprintCommand}"
+                          CommandParameter="{Binding}" />
+                  <Button Content="Edit"
+                          Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).EditProfileCommand}"
+                          CommandParameter="{Binding}" />
+                  <Button Content="Cookies"
+                          Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ImportCookiesCommand}"
+                          CommandParameter="{Binding}" />
                   <Button Content="Launch"
                           Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).LaunchCommand}"
                           CommandParameter="{Binding}" />

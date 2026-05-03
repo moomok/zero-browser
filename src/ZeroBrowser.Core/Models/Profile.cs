@@ -11,7 +11,8 @@ public sealed class Profile
     public string?         GroupId { get; set; }
     public List<string>    Tags { get; set; } = new();
 
-    public required string FingerprintSeed { get; init; }
+    public required string FingerprintSeed { get; set; }
+    public OperatingSystemKind? PinnedOs { get; set; }
     public Guid?           ProxyId { get; set; }
 
     /// <summary>Absolute path to the per-profile user data directory used by Chromium.</summary>

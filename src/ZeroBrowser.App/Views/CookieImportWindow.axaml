@@ -1,0 +1,38 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ZeroBrowser.App.ViewModels"
+        x:Class="ZeroBrowser.App.Views.CookieImportWindow"
+        x:DataType="vm:CookieImportViewModel"
+        Width="720" Height="640"
+        WindowStartupLocation="CenterOwner"
+        Icon="/Assets/icon.png"
+        Title="{Binding Title}">
+    <Grid Margin="16" RowDefinitions="Auto,Auto,*,Auto,Auto">
+        <TextBlock Grid.Row="0" Text="{Binding Title}" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8"/>
+
+        <TextBlock Grid.Row="1" FontSize="12" Opacity="0.7" Margin="0,0,0,8" TextWrapping="Wrap"
+                   Text="Paste cookies in either JSON (Puppeteer / Playwright / EditThisCookie) or Netscape (curl / wget) format. They are applied to the browser before navigation on the next launch."/>
+
+        <TextBox Grid.Row="2"
+                 AcceptsReturn="True"
+                 TextWrapping="NoWrap"
+                 FontFamily="Consolas,Menlo,monospace"
+                 FontSize="12"
+                 PlaceholderText='[{"name":"session","value":"abc123","domain":".example.com","path":"/","secure":true,"httpOnly":true}]'
+                 Text="{Binding Input, Mode=TwoWay}"/>
+
+        <TextBlock Grid.Row="3"
+                   Text="{Binding StatusMessage}"
+                   FontSize="12" Margin="0,12,0,0" TextWrapping="Wrap"/>
+
+        <Grid Grid.Row="4" Margin="0,12,0,0" ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+            <TextBlock Grid.Column="0"
+                       VerticalAlignment="Center"
+                       Text="{Binding ExistingCount, StringFormat='Saved: {0}'}"
+                       Opacity="0.6" FontSize="12"/>
+            <Button Grid.Column="2" Content="Clear all" Command="{Binding ClearAllCommand}" Margin="0,0,8,0"/>
+            <Button Grid.Column="3" Content="Import"    Command="{Binding ImportCommand}"    Margin="0,0,8,0" IsDefault="True"/>
+            <Button Grid.Column="4" Content="Close"     Click="OnCloseClick"/>
+        </Grid>
+    </Grid>
+</Window>
