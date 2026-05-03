@@ -47,6 +47,9 @@
                   <Button Content="Edit"
                           Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).EditProfileCommand}"
                           CommandParameter="{Binding}" />
+                  <Button Content="Cookies"
+                          Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ImportCookiesCommand}"
+                          CommandParameter="{Binding}" />
                   <Button Content="Launch"
                           Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).LaunchCommand}"
                           CommandParameter="{Binding}" />

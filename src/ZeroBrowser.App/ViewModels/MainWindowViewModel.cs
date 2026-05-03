@@ -123,6 +123,25 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void ImportCookies(ProfileItemViewModel? item)
+    {
+        if (item is null) return;
+        var window = new CookieImportWindow
+        {
+            DataContext = new CookieImportViewModel(item.Profile)
+        };
+        if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
+            && desktop.MainWindow is Window owner)
+        {
+            window.ShowDialog(owner);
+        }
+        else
+        {
+            window.Show();
+        }
+    }
+
+    [RelayCommand]
     private void OpenProxyManager()
     {
         var window = new ProxyManagerWindow

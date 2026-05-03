@@ -12,23 +12,27 @@ Inspirasi: Multilogin / GoLogin / AdsPower / Dolphin Anty / Kameleo — versi op
 
 ## Status
 
-**MVP (v0.1)** — fungsional inti sudah jalan:
+**MVP (v0.2)** — fungsional inti sudah jalan:
 
 - ✅ FingerprintGenerator deterministik (seed → fingerprint konsisten antar sesi)
 - ✅ FingerprintInjector lengkap (Navigator, Screen, Canvas, WebGL, Audio, Intl/timezone, Geolocation, MediaDevices, WebRTC, Permissions, chrome.*) dengan hardening anti-detect (toString native, prototype patching, no global leaks)
 - ✅ PuppeteerBrowserLauncher cross-platform (PuppeteerSharp + CDP)
 - ✅ Per-profile user-data-dir, proxy server + auth, timezone emulation
 - ✅ Storage SQLite + AES-256-GCM + Argon2id
-- ✅ Avalonia UI 11 (cross-platform native, Fluent Design)
-- ✅ 23 unit tests (semua green)
+- ✅ Avalonia UI 12 (cross-platform native, Fluent Design)
+- ✅ **Master password lock di app start** (Argon2id-derived SecretBox; sensitive data di disk dienkripsi)
+- ✅ **Fingerprint preview dialog** (review UA / TZ / GPU / screen / language sebelum launch)
+- ✅ **Profile editor lengkap** (nama, OS pin, proxy assignment, regenerate seed, notes; live preview)
+- ✅ **Proxy manager + bulk import** (5 format: `host:port`, `host:port:user:pass`, `user:pass@host:port`, `scheme://host:port`, `scheme://user:pass@host:port`; password dienkripsi at-rest)
+- ✅ **Cookie importer** (JSON Puppeteer/Playwright/EditThisCookie + Netscape/curl format → diapply per-profile sebelum navigation)
+- ✅ 48 unit tests (semua green di Win/Mac/Linux)
 
 **Belum ada (roadmap):**
 
-- [ ] Profile editor UI lengkap (saat ini auto-generate via "New profile")
-- [ ] Proxy manager UI
-- [ ] Cookie importer (JSON / Netscape / EditThisCookie)
 - [ ] Bulk create profil dengan template
-- [ ] Master password lock di app start
+- [ ] Cookie *exporter* (export current browser cookies → JSON / Netscape file)
+- [ ] Proxy validator (cek koneksi + IP reveal sebelum launch)
+- [ ] Tag-based filter & search di profile list
 - [ ] JA3/TLS fingerprint diversification (butuh patched Chromium / mitm-impersonate)
 - [ ] Automation runner (Playwright/Puppeteer script per profil)
 - [ ] Code signing + auto-update
