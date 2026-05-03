@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Data.Sqlite;
 using Xunit;
 using ZeroBrowser.Core.Models;
 using ZeroBrowser.Storage.Crypto;
@@ -96,6 +97,13 @@ public class ProxyRepositoryTests : IDisposable
 
     public void Dispose()
     {
-        if (File.Exists(_dbPath)) File.Delete(_dbPath);
+        // Microsoft.Data.Sqlite uses connection pooling by default. On Windows the
+        // pooled connection keeps the file open, so File.Delete throws. Clear the
+        // pool first so the OS releases the handle.
+        SqliteConnection.ClearAllPools();
+        if (File.Exists(_dbPath))
+        {
+            try { File.Delete(_dbPath); } catch (IOException) { /* best-effort cleanup */ }
+        }
     }
 }
