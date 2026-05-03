@@ -1,6 +1,6 @@
-# AntiDetect Browser
+# Zero Browser
 
-> Cross-platform anti-detect browser desktop dengan dukungan banyak profil dan fingerprint berbeda-beda per profil.
+> Cross-platform Zero Browser desktop dengan dukungan banyak profil dan fingerprint berbeda-beda per profil.
 
 Setiap profil = identitas browser terpisah dengan **fingerprint sendiri** (Canvas, WebGL, Audio, fonts, timezone, locale, hardware, dll), **storage terisolasi**, dan **proxy berbeda**. Satu PC bisa terlihat sebagai puluhan/ratusan device berbeda dari sisi server.
 
@@ -52,14 +52,14 @@ Inspirasi: Multilogin / GoLogin / AdsPower / Dolphin Anty / Kameleo — versi op
 ## Struktur Solution
 
 ```
-AntiDetectBrowser.sln
+ZeroBrowser.sln
 ├─ src/
-│  ├─ AntiDetectBrowser.Core/         (model, fingerprint generator + injector — pure .NET)
-│  ├─ AntiDetectBrowser.Storage/      (SQLite repo + crypto)
-│  ├─ AntiDetectBrowser.Browser/      (PuppeteerSharp launcher + CDP injection)
-│  └─ AntiDetectBrowser.App/          (Avalonia UI, MVVM, entry point)
+│  ├─ ZeroBrowser.Core/         (model, fingerprint generator + injector — pure .NET)
+│  ├─ ZeroBrowser.Storage/      (SQLite repo + crypto)
+│  ├─ ZeroBrowser.Browser/      (PuppeteerSharp launcher + CDP injection)
+│  └─ ZeroBrowser.App/          (Avalonia UI, MVVM, entry point)
 └─ tests/
-   └─ AntiDetectBrowser.Tests/        (xUnit, runs on Linux/Mac/Win)
+   └─ ZeroBrowser.Tests/        (xUnit, runs on Linux/Mac/Win)
 ```
 
 ---
@@ -75,11 +75,11 @@ AntiDetectBrowser.sln
 ### Clone & Build
 
 ```bash
-git clone https://github.com/moomok/anti-detect-browser.git
-cd anti-detect-browser
+git clone https://github.com/moomok/zero-browser.git
+cd zero-browser
 dotnet build
 dotnet test
-dotnet run --project src/AntiDetectBrowser.App
+dotnet run --project src/ZeroBrowser.App
 ```
 
 ### Build standalone .exe / app bundle
@@ -87,7 +87,7 @@ dotnet run --project src/AntiDetectBrowser.App
 #### Windows (single-file)
 
 ```powershell
-dotnet publish src/AntiDetectBrowser.App `
+dotnet publish src/ZeroBrowser.App `
     -c Release `
     -r win-x64 `
     --self-contained `
@@ -98,7 +98,7 @@ dotnet publish src/AntiDetectBrowser.App `
 #### macOS (.app bundle, butuh tooling tambahan)
 
 ```bash
-dotnet publish src/AntiDetectBrowser.App \
+dotnet publish src/ZeroBrowser.App \
     -c Release \
     -r osx-arm64 \
     --self-contained \
@@ -110,7 +110,7 @@ dotnet publish src/AntiDetectBrowser.App \
 #### Linux
 
 ```bash
-dotnet publish src/AntiDetectBrowser.App \
+dotnet publish src/ZeroBrowser.App \
     -c Release \
     -r linux-x64 \
     --self-contained \
@@ -121,10 +121,10 @@ dotnet publish src/AntiDetectBrowser.App \
 
 ## Cara Pakai (Quick Start)
 
-1. Run app: `dotnet run --project src/AntiDetectBrowser.App`.
+1. Run app: `dotnet run --project src/ZeroBrowser.App`.
 2. Klik **"New profile"** — fingerprint baru auto-generate (deterministic dari seed UUID).
 3. Klik **"Launch"** di baris profil. Chromium akan dibuka dengan:
-   - User-data-dir terisolasi di `%LOCALAPPDATA%\AntiDetectBrowser\profiles\<uuid>\`
+   - User-data-dir terisolasi di `%LOCALAPPDATA%\ZeroBrowser\profiles\<uuid>\`
    - Patch fingerprint di-inject sebelum page script jalan
    - URL default: https://abrahamjuliot.github.io/creepjs/ (untuk verifikasi)
 4. Periksa skor di **creepjs**, **iphey**, **pixelscan**, **browserleaks** — tiap profil harus terlihat sebagai device berbeda dengan skor "trust" tinggi.
@@ -167,7 +167,7 @@ Cek satu per satu:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│              AntiDetectBrowser.App (Avalonia)               │
+│              ZeroBrowser.App (Avalonia)               │
 │  ┌──────────────┐  ┌────────────────────────────────────┐  │
 │  │ MainWindow   │──│ MainWindowViewModel (MVVM)         │  │
 │  │  • DataGrid  │  │  • NewProfile / Reload / Launch    │  │

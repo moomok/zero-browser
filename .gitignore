@@ -40,10 +40,10 @@ coverage*.info
 puppeteer-cache/
 
 ## Local app data (do NOT commit user profiles)
-**/AntiDetectBrowser/profiles/
-**/AntiDetectBrowser/data.db
-**/AntiDetectBrowser/data.db-journal
-**/AntiDetectBrowser/master.key
+**/ZeroBrowser/profiles/
+**/ZeroBrowser/data.db
+**/ZeroBrowser/data.db-journal
+**/ZeroBrowser/master.key
 
 ## Logs
 *.log
