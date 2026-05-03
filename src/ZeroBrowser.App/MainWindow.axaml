@@ -40,6 +40,9 @@
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:ProfileItemViewModel">
                 <StackPanel Orientation="Horizontal" Spacing="6" Margin="6">
+                  <Button Content="Preview"
+                          Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).PreviewFingerprintCommand}"
+                          CommandParameter="{Binding}" />
                   <Button Content="Launch"
                           Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).LaunchCommand}"
                           CommandParameter="{Binding}" />

@@ -1,4 +1,7 @@
 using System.Collections.ObjectModel;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using ZeroBrowser.App.Views;
 using ZeroBrowser.Browser;
 using ZeroBrowser.Core.Fingerprint;
 using ZeroBrowser.Core.Models;
@@ -82,6 +85,26 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             item.Status = "error";
             StatusMessage = $"Failed to launch {item.Name}: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void PreviewFingerprint(ProfileItemViewModel? item)
+    {
+        if (item is null) return;
+        var window = new FingerprintPreviewWindow
+        {
+            DataContext = new FingerprintPreviewViewModel(item.Name, item.Fingerprint)
+        };
+
+        if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
+            && desktop.MainWindow is Window owner)
+        {
+            window.ShowDialog(owner);
+        }
+        else
+        {
+            window.Show();
         }
     }
 
