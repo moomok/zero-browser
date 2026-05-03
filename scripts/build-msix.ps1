@@ -73,8 +73,11 @@ function Get-SdkTool($name) {
                   Where-Object { $_.FullName -match "x64\\$name$" }
     if (-not $candidates) { throw "$name not found in Windows SDK." }
     $best = $candidates | Sort-Object {
-        # Path looks like "...\Windows Kits\10\bin\10.0.22621.0\x64\foo.exe"
-        $verDir = (Split-Path -Path (Split-Path $_.FullName -Parent) -Leaf)
+        # Path: ...\Windows Kits\10\bin\10.0.22621.0\x64\foo.exe
+        # Walk: full -Parent -> ...\10.0.22621.0\x64
+        #       again -Parent -> ...\10.0.22621.0
+        #       -Leaf         -> 10.0.22621.0
+        $verDir = Split-Path -Leaf (Split-Path -Parent (Split-Path -Parent $_.FullName))
         try { [Version]$verDir } catch { [Version]"0.0.0.0" }
     } -Descending | Select-Object -First 1
     return $best.FullName
@@ -125,10 +128,18 @@ if ($env:SIGNING_PFX_BASE64 -and $env:SIGNING_PFX_PWD) {
 }
 
 Write-Host "==> Signing MSIX..." -ForegroundColor Cyan
-$pwdPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-    [Runtime.InteropServices.Marshal]::SecureStringToBSTR($pfxPwd))
-& $signTool sign /fd SHA256 /a /f $pfxPath /p $pwdPlain $msixPath
-if ($LASTEXITCODE -ne 0) { throw "signtool sign failed" }
+# Decode the SecureString into a temporary plaintext for signtool's /p arg.
+# SecureStringToBSTR allocates native memory that must be zeroed + freed via
+# ZeroFreeBSTR — otherwise the plaintext password lingers in the process heap.
+$bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($pfxPwd)
+try {
+    $pwdPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+    & $signTool sign /fd SHA256 /a /f $pfxPath /p $pwdPlain $msixPath
+    if ($LASTEXITCODE -ne 0) { throw "signtool sign failed" }
+} finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    Remove-Variable -Name pwdPlain -ErrorAction SilentlyContinue
+}
 
 Write-Host "==> Building portable zip..." -ForegroundColor Cyan
 $zipPath = Join-Path $artifacts "ZeroBrowser-x64-$Version-portable.zip"
