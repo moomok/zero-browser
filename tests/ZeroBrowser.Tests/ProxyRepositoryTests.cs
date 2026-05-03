@@ -57,6 +57,10 @@ public class ProxyRepositoryTests : IDisposable
         };
         _repo.Insert(p);
 
+        // On Windows, the SQLite connection pool keeps the db file open with
+        // a sharing mode that File.ReadAllBytes can't satisfy. Drain the pool
+        // first so the OS releases the handle before we read raw bytes.
+        SqliteConnection.ClearAllPools();
         var fileBytes = File.ReadAllBytes(_dbPath);
         var asString = System.Text.Encoding.UTF8.GetString(fileBytes);
         asString.Should().NotContain("very-secret-password-xyz");
