@@ -31,7 +31,9 @@ public sealed class FingerprintPreviewViewModel : ObservableObject
             new("Primary language", fp.PrimaryLanguage),
             new("All languages",    string.Join(", ", fp.Languages)),
             new("Accept-Language",  fp.AcceptLanguage),
-            new("Timezone",         $"{fp.Timezone}  (UTC{(fp.TimezoneOffsetMinutes >= 0 ? "+" : "-")}{Math.Abs(fp.TimezoneOffsetMinutes) / 60:00}:{Math.Abs(fp.TimezoneOffsetMinutes) % 60:00})"),
+            // TimezoneOffsetMinutes follows JS getTimezoneOffset() — positive = west of UTC.
+            // Display sign is therefore inverted from the field.
+            new("Timezone",         $"{fp.Timezone}  (UTC{(fp.TimezoneOffsetMinutes <= 0 ? "+" : "-")}{Math.Abs(fp.TimezoneOffsetMinutes) / 60:00}:{Math.Abs(fp.TimezoneOffsetMinutes) % 60:00})"),
             new("Geolocation",      $"{fp.GeoLatitude:F4}, {fp.GeoLongitude:F4} (±{fp.GeoAccuracy:F0}m)"),
         }));
 

@@ -99,7 +99,8 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
         {
             var fp = _generator.Generate(FingerprintSeed, SelectedOs?.Os);
             PreviewUserAgent = fp.UserAgent;
-            PreviewTimezone  = $"{fp.Timezone} (UTC{(fp.TimezoneOffsetMinutes >= 0 ? "+" : "-")}{Math.Abs(fp.TimezoneOffsetMinutes) / 60:00}:{Math.Abs(fp.TimezoneOffsetMinutes) % 60:00})";
+            // TimezoneOffsetMinutes follows JS getTimezoneOffset() — positive = west of UTC, so display sign is inverted.
+            PreviewTimezone  = $"{fp.Timezone} (UTC{(fp.TimezoneOffsetMinutes <= 0 ? "+" : "-")}{Math.Abs(fp.TimezoneOffsetMinutes) / 60:00}:{Math.Abs(fp.TimezoneOffsetMinutes) % 60:00})";
             PreviewScreen    = $"{fp.ScreenWidth} × {fp.ScreenHeight} @ {fp.DevicePixelRatio:F1}x";
             PreviewGpu       = $"{fp.WebGlVendor} — {fp.WebGlRenderer}";
             PreviewLanguage  = $"{fp.PrimaryLanguage} ({string.Join(", ", fp.Languages)})";
