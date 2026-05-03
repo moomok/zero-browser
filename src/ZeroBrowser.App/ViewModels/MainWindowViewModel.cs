@@ -37,29 +37,32 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Profiles.Clear();
         foreach (var p in _profiles.ListAll())
         {
-            var fp = _generator.Generate(p.FingerprintSeed);
+            var fp = _generator.Generate(p.FingerprintSeed, p.PinnedOs);
             Profiles.Add(new ProfileItemViewModel(p, fp));
         }
         StatusMessage = $"{Profiles.Count} profile(s) loaded";
     }
 
     [RelayCommand]
-    private void NewProfile()
+    private void NewProfile() => OpenEditor(null);
+
+    [RelayCommand]
+    private void EditProfile(ProfileItemViewModel? item) => OpenEditor(item?.Profile);
+
+    private void OpenEditor(Profile? existing)
     {
-        var seed = Guid.NewGuid().ToString("N");
-        var id   = Guid.NewGuid();
-        var dataRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ZeroBrowser", "profiles", id.ToString());
-        var profile = new Profile
+        var vm = new ProfileEditorViewModel(_profiles, _proxies, _generator, existing);
+        var window = new ProfileEditorWindow { DataContext = vm };
+        vm.Saved     += _ => Reload();
+        if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
+            && desktop.MainWindow is Window owner)
         {
-            Id = id,
-            Name = $"Profile {DateTime.Now:HH:mm:ss}",
-            FingerprintSeed = seed,
-            StoragePath = dataRoot
-        };
-        _profiles.Insert(profile);
-        Reload();
+            window.ShowDialog(owner);
+        }
+        else
+        {
+            window.Show();
+        }
     }
 
     [RelayCommand]

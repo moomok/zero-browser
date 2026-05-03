@@ -1,0 +1,93 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ZeroBrowser.App.ViewModels"
+        x:Class="ZeroBrowser.App.Views.ProfileEditorWindow"
+        x:DataType="vm:ProfileEditorViewModel"
+        Width="640" Height="660"
+        WindowStartupLocation="CenterOwner"
+        Title="{Binding Title}">
+    <Grid Margin="16" RowDefinitions="Auto,*,Auto">
+        <TextBlock Grid.Row="0" Text="{Binding Title}" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12"/>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="14">
+
+                <StackPanel>
+                    <TextBlock Text="Name" FontSize="12" Margin="0,0,0,4"/>
+                    <TextBox PlaceholderText="My profile" Text="{Binding Name, Mode=TwoWay}" />
+                </StackPanel>
+
+                <StackPanel>
+                    <TextBlock Text="Operating system (fingerprint)" FontSize="12" Margin="0,0,0,4"/>
+                    <ComboBox ItemsSource="{Binding OsOptions}"
+                              SelectedItem="{Binding SelectedOs, Mode=TwoWay}"
+                              HorizontalAlignment="Stretch">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:OsOption">
+                                <TextBlock Text="{Binding Display}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </StackPanel>
+
+                <StackPanel>
+                    <TextBlock Text="Proxy" FontSize="12" Margin="0,0,0,4"/>
+                    <ComboBox ItemsSource="{Binding ProxyOptions}"
+                              SelectedItem="{Binding SelectedProxy, Mode=TwoWay}"
+                              HorizontalAlignment="Stretch">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ProxyOption">
+                                <TextBlock Text="{Binding Display}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </StackPanel>
+
+                <StackPanel>
+                    <TextBlock Text="Fingerprint seed (deterministic)" FontSize="12" Margin="0,0,0,4"/>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Grid.Column="0" Text="{Binding FingerprintSeed, Mode=TwoWay}"
+                                 FontFamily="Consolas,Menlo,monospace" FontSize="12"/>
+                        <Button Grid.Column="1" Margin="8,0,0,0"
+                                Content="Regenerate"
+                                Command="{Binding RegenerateCommand}"/>
+                    </Grid>
+                    <TextBlock Text="Same seed = same fingerprint, every time."
+                               FontSize="11" Opacity="0.6" Margin="0,4,0,0"/>
+                </StackPanel>
+
+                <StackPanel>
+                    <TextBlock Text="Notes" FontSize="12" Margin="0,0,0,4"/>
+                    <TextBox AcceptsReturn="True" MinHeight="60" MaxHeight="120"
+                             TextWrapping="Wrap"
+                             Text="{Binding Notes, Mode=TwoWay}" />
+                </StackPanel>
+
+                <Border BorderBrush="#22000000" BorderThickness="1" CornerRadius="6" Padding="12">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Live preview" FontWeight="SemiBold" FontSize="13"/>
+                        <Grid ColumnDefinitions="100,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="UA"      Opacity="0.6" FontSize="11"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding PreviewUserAgent}" FontSize="11" TextWrapping="Wrap"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Timezone" Opacity="0.6" FontSize="11"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding PreviewTimezone}" FontSize="11"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Screen"   Opacity="0.6" FontSize="11"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding PreviewScreen}"   FontSize="11"/>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="GPU"      Opacity="0.6" FontSize="11"/>
+                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding PreviewGpu}"      FontSize="11"/>
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Language" Opacity="0.6" FontSize="11"/>
+                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding PreviewLanguage}" FontSize="11"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8"
+                    HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="Cancel" Command="{Binding CancelCommand}" />
+            <Button Content="Save"   Command="{Binding SaveCommand}" IsDefault="True"/>
+        </StackPanel>
+    </Grid>
+</Window>
