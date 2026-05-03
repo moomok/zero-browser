@@ -5,6 +5,7 @@
         x:DataType="vm:FingerprintPreviewViewModel"
         Width="720" Height="640"
         WindowStartupLocation="CenterOwner"
+        Icon="/Assets/icon.png"
         Title="{Binding Title}">
     <Grid RowDefinitions="Auto,*,Auto" Margin="16">
         <TextBlock Grid.Row="0"

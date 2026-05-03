@@ -3,29 +3,35 @@
         xmlns:vm="using:ZeroBrowser.App.ViewModels"
         x:Class="ZeroBrowser.App.Views.UnlockWindow"
         x:DataType="vm:UnlockWindowViewModel"
-        Width="420" Height="380"
+        Width="420" Height="440"
         CanResize="False"
         WindowStartupLocation="CenterScreen"
+        Icon="/Assets/icon.png"
         Title="Zero Browser">
-    <Grid Margin="32" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto">
-        <TextBlock Grid.Row="0"
+    <Grid Margin="32" RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto,Auto">
+        <Image Grid.Row="0"
+               Source="/Assets/icon.png"
+               Width="72" Height="72"
+               HorizontalAlignment="Center"
+               Margin="0,0,0,8"/>
+        <TextBlock Grid.Row="1"
                    Text="Zero Browser"
                    FontSize="28" FontWeight="SemiBold"
                    HorizontalAlignment="Center"/>
-        <TextBlock Grid.Row="1"
+        <TextBlock Grid.Row="2"
                    Text="{Binding Subtitle}"
                    FontSize="13" Opacity="0.7"
                    HorizontalAlignment="Center"
                    Margin="0,4,0,24"/>
 
-        <TextBlock Grid.Row="2" Text="Master password" FontSize="12" Margin="0,0,0,4"/>
-        <TextBox  Grid.Row="3"
+        <TextBlock Grid.Row="3" Text="Master password" FontSize="12" Margin="0,16,0,4"/>
+        <TextBox  Grid.Row="4"
                   PasswordChar="•"
                   PlaceholderText="Enter your password"
                   Text="{Binding Password, Mode=TwoWay}"
                   KeyDown="OnPasswordKeyDown" />
 
-        <StackPanel Grid.Row="4" Spacing="8" Margin="0,16,0,0"
+        <StackPanel Grid.Row="5" Spacing="8" Margin="0,16,0,0"
                     IsVisible="{Binding ShowConfirm}">
             <TextBlock Text="Confirm master password" FontSize="12"/>
             <TextBox PasswordChar="•"
@@ -34,7 +40,7 @@
                      KeyDown="OnPasswordKeyDown" />
         </StackPanel>
 
-        <TextBlock Grid.Row="5"
+        <TextBlock Grid.Row="6"
                    Text="{Binding ErrorMessage}"
                    Foreground="#dc2626"
                    FontSize="12"
@@ -42,7 +48,7 @@
                    Margin="0,12,0,0"
                    TextWrapping="Wrap"/>
 
-        <Button Grid.Row="6"
+        <Button Grid.Row="7"
                 Content="{Binding PrimaryButtonText}"
                 Command="{Binding SubmitCommand}"
                 IsDefault="True"
