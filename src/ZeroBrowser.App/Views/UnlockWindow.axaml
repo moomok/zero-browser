@@ -1,0 +1,54 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ZeroBrowser.App.ViewModels"
+        x:Class="ZeroBrowser.App.Views.UnlockWindow"
+        x:DataType="vm:UnlockWindowViewModel"
+        Width="420" Height="380"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen"
+        Title="Zero Browser">
+    <Grid Margin="32" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto">
+        <TextBlock Grid.Row="0"
+                   Text="Zero Browser"
+                   FontSize="28" FontWeight="SemiBold"
+                   HorizontalAlignment="Center"/>
+        <TextBlock Grid.Row="1"
+                   Text="{Binding Subtitle}"
+                   FontSize="13" Opacity="0.7"
+                   HorizontalAlignment="Center"
+                   Margin="0,4,0,24"/>
+
+        <TextBlock Grid.Row="2" Text="Master password" FontSize="12" Margin="0,0,0,4"/>
+        <TextBox  Grid.Row="3"
+                  PasswordChar="•"
+                  PlaceholderText="Enter your password"
+                  Text="{Binding Password, Mode=TwoWay}"
+                  KeyDown="OnPasswordKeyDown" />
+
+        <StackPanel Grid.Row="4" Spacing="8" Margin="0,16,0,0"
+                    IsVisible="{Binding ShowConfirm}">
+            <TextBlock Text="Confirm master password" FontSize="12"/>
+            <TextBox PasswordChar="•"
+                     PlaceholderText="Re-enter the same password"
+                     Text="{Binding PasswordConfirm, Mode=TwoWay}"
+                     KeyDown="OnPasswordKeyDown" />
+        </StackPanel>
+
+        <TextBlock Grid.Row="5"
+                   Text="{Binding ErrorMessage}"
+                   Foreground="#dc2626"
+                   FontSize="12"
+                   IsVisible="{Binding HasError}"
+                   Margin="0,12,0,0"
+                   TextWrapping="Wrap"/>
+
+        <Button Grid.Row="6"
+                Content="{Binding PrimaryButtonText}"
+                Command="{Binding SubmitCommand}"
+                IsDefault="True"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center"
+                Margin="0,16,0,0"
+                Padding="0,8"/>
+    </Grid>
+</Window>
