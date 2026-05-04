@@ -24,10 +24,21 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
     {
         Directory.CreateDirectory(request.Profile.StoragePath);
 
-        // Make sure we have a Chromium binary available locally.
-        // PuppeteerSharp's BrowserFetcher downloads Chromium-for-Testing on first use.
-        var fetcher = new BrowserFetcher();
-        await fetcher.DownloadAsync().ConfigureAwait(false);
+        // Resolve which Chromium binary to launch. If the profile pins an
+        // installed branded build (Chrome, Brave, Edge, …) and the file still
+        // exists, we use that. Otherwise we fall back to PuppeteerSharp's
+        // bundled Chromium-for-Testing build (BrowserFetcher downloads on
+        // first use).
+        string? executablePath = null;
+        if (!string.IsNullOrWhiteSpace(request.Profile.EnginePath) && File.Exists(request.Profile.EnginePath))
+        {
+            executablePath = request.Profile.EnginePath;
+        }
+        else
+        {
+            var fetcher = new BrowserFetcher();
+            await fetcher.DownloadAsync().ConfigureAwait(false);
+        }
 
         var args = new List<string>
         {
@@ -51,11 +62,67 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
             args.Add($"--proxy-server={scheme}://{request.Proxy.Host}:{request.Proxy.Port}");
         }
 
+        // Sideload extensions: only include enabled ones whose folders still
+        // exist on disk. Chromium accepts a comma-separated list to
+        // --load-extension. The flag has no escape mechanism, so a path
+        // containing a comma would be parsed as two separate (invalid) paths.
+        // We filter those out here as a defensive guard — the UI also rejects
+        // such paths at folder-pick time, and CRX imports use GUIDed names.
+        // When running on the deterministic Chromium-for-Testing build we
+        // additionally pin the set with --disable-extensions-except so the
+        // binary's own state can't drift between runs. When running on a
+        // user-installed branded browser we intentionally do NOT pin — that
+        // would prevent Web Store extensions the user installs interactively
+        // from running.
+        string[]? loadExtensionPaths = null;
+        if (request.Extensions is { Count: > 0 })
+        {
+            loadExtensionPaths = request.Extensions
+                .Where(e => e.Enabled
+                            && !string.IsNullOrWhiteSpace(e.Path)
+                            && !e.Path!.Contains(',')
+                            && Directory.Exists(e.Path))
+                .Select(e => e.Path!)
+                .ToArray();
+
+            if (loadExtensionPaths.Length > 0)
+            {
+                var joined = string.Join(",", loadExtensionPaths);
+                args.Add($"--load-extension={joined}");
+                if (executablePath is null)
+                {
+                    args.Add($"--disable-extensions-except={joined}");
+                }
+            }
+        }
+
+        // PuppeteerSharp's DefaultArgs include "--disable-extensions" which
+        // unconditionally blocks every extension at startup, including
+        // anything passed via --load-extension and any Web Store extensions
+        // the user has previously installed in this profile's user-data-dir.
+        //
+        // - On Chromium-for-Testing we already counter this with
+        //   --disable-extensions-except=<paths> (Chrome treats this as an
+        //   override of --disable-extensions for the whitelisted folders).
+        // - On a branded build we explicitly want Web Store extensions and
+        //   the user's interactive installs to work, so we drop
+        //   --disable-extensions from the defaults entirely. We always do
+        //   this in branded mode (not just when sideloading) so a profile
+        //   that uses Chrome with no sideloaded extensions can still install
+        //   from the Web Store the next time it launches.
+        string[]? ignoredDefaultArgs = null;
+        if (executablePath is not null)
+        {
+            ignoredDefaultArgs = new[] { "--disable-extensions" };
+        }
+
         var launchOptions = new LaunchOptions
         {
             Headless = request.Headless,
             UserDataDir = request.Profile.StoragePath,
+            ExecutablePath = executablePath,
             Args = args.ToArray(),
+            IgnoredDefaultArgs = ignoredDefaultArgs,
             DefaultViewport = null,                  // use real window size
             AcceptInsecureCerts = false
         };

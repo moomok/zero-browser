@@ -74,12 +74,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
         try
         {
             var proxy = item.Profile.ProxyId is { } id ? _proxies.Get(id) : null;
+            var extensions = _profiles.ListExtensions(item.Profile.Id);
             var session = await _launcher.LaunchAsync(new LaunchRequest(
                 item.Profile,
                 item.Fingerprint,
                 Proxy: proxy,
                 StartUrl: "https://abrahamjuliot.github.io/creepjs/",
-                Headless: false));
+                Headless: false,
+                Extensions: extensions));
             item.Status = session.IsRunning ? "running" : "exited";
             StatusMessage = $"Launched {item.Name}";
 

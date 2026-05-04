@@ -16,12 +16,10 @@ public static class Schema
             pinned_os         TEXT,
             proxy_id          TEXT,
             storage_path      TEXT NOT NULL,
+            engine_path       TEXT,
             created_at        INTEGER NOT NULL,
             last_used_at      INTEGER
         );
-
-        -- Migration: add pinned_os column if upgrading from an earlier schema.
-        -- SQLite ignores 'duplicate column' inside try/catch; we handle that in code instead.
 
         CREATE TABLE IF NOT EXISTS proxies (
             id            TEXT PRIMARY KEY,
@@ -37,8 +35,20 @@ public static class Schema
             ip_last_seen  TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS profile_extensions (
+            id          TEXT PRIMARY KEY,
+            profile_id  TEXT NOT NULL,
+            name        TEXT NOT NULL,
+            path        TEXT NOT NULL,
+            enabled     INTEGER NOT NULL DEFAULT 1,
+            sort_order  INTEGER NOT NULL DEFAULT 0,
+            created_at  INTEGER NOT NULL,
+            FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+        );
+
         CREATE INDEX IF NOT EXISTS idx_profiles_group ON profiles(group_id);
         CREATE INDEX IF NOT EXISTS idx_profiles_proxy ON profiles(proxy_id);
+        CREATE INDEX IF NOT EXISTS idx_extensions_profile ON profile_extensions(profile_id);
         """;
 
     public static void Apply(SqliteConnection conn)
@@ -47,11 +57,18 @@ public static class Schema
         cmd.CommandText = CreateTables;
         cmd.ExecuteNonQuery();
 
-        // Best-effort migration: add pinned_os if it was missing on an older DB.
+        // Best-effort migrations for older DBs. SQLite throws if the column
+        // already exists; we swallow that and continue.
+        TryAddColumn(conn, "profiles", "pinned_os",   "TEXT");
+        TryAddColumn(conn, "profiles", "engine_path", "TEXT");
+    }
+
+    private static void TryAddColumn(SqliteConnection conn, string table, string column, string type)
+    {
         try
         {
             using var alter = conn.CreateCommand();
-            alter.CommandText = "ALTER TABLE profiles ADD COLUMN pinned_os TEXT";
+            alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {type}";
             alter.ExecuteNonQuery();
         }
         catch (SqliteException)

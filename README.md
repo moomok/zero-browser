@@ -152,6 +152,33 @@ Pipeline `.github/workflows/release.yml` otomatis bikin **draft Release** setiap
 
 ---
 
+## Extensions (per profile)
+
+Setiap profil bisa load extensions Chromium secara independen. Ada dua mode:
+
+| Mode | Web Store | Determinism | Cara |
+|---|---|---|---|
+| **Chromium for Testing** (default) | ❌ tidak bisa install dari Web Store | ✅ binary pinned | Sideload manual via folder atau CRX |
+| **Browser ter-install** (Chrome / Brave / Edge / Vivaldi / Opera) | ✅ login + install Web Store extensions seperti biasa | ⚠️ binary auto-update bisa drift | Pilih dari dropdown "Engine" di Profile Editor (auto-detect) |
+
+**Cara pakai (Profile Editor):**
+1. Pilih **Engine** — defaultnya "Chromium for Testing" (deterministic). Ganti ke Chrome/Brave/Edge kalau profile butuh akses Web Store.
+2. Di panel **Extensions**:
+   - **Add folder** — browse ke folder unpacked extension (harus berisi `manifest.json`)
+   - **Import .crx** — pilih file `.crx`, otomatis di-extract ke `%LOCALAPPDATA%\ZeroBrowser\extensions\<profile-id>\<random>\`
+   - Toggle ✓ untuk enable/disable per launch
+   - Drag urutan untuk atur sort order, atau hapus dengan tombol Remove
+3. Save. Extensions otomatis di-load via `--load-extension=...` saat profile next launch.
+
+**Implementation notes:**
+- Pada mode "Chromium for Testing" kita tambahkan `--disable-extensions-except` untuk pin set extension supaya state binary deterministic.
+- Pada mode "Browser ter-install" guard tersebut dilepas, jadi user tetap bisa install Web Store extensions interaktif (extensions kita coexist dengan extensions native browser).
+- Default penyimpanan: bundled Chromium-for-Testing tetap di-download lewat PuppeteerSharp `BrowserFetcher`. Tidak ada dependency external baru.
+
+**Anti-detect heads-up:** Extensions adalah salah satu vektor fingerprint paling besar. uBlock + Cookie Editor punya signature DOM yang ke-detect creepjs. Untuk profil yang butuh stealth maksimum, **stay on Chromium-for-Testing tanpa extensions**, atau install set extension yang sama di semua profil supaya tidak distinguishable antar profil.
+
+---
+
 ## Cara Verifikasi Fingerprint Berbeda Per Profil
 
 ### 1. creepjs ([abrahamjuliot.github.io/creepjs](https://abrahamjuliot.github.io/creepjs/))
