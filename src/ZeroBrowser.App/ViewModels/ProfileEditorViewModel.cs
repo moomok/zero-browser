@@ -259,6 +259,20 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            // CrxImporter.Extract creates the destination directory eagerly,
+            // so a failure mid-extract (corrupted ZIP, missing manifest, etc.)
+            // would otherwise orphan an empty / partial directory under
+            // %LOCALAPPDATA%\ZeroBrowser\extensions\<profile>\. Clean up so
+            // repeated failures don't accumulate unbounded directories.
+            try
+            {
+                if (Directory.Exists(destRoot))
+                    Directory.Delete(destRoot, recursive: true);
+            }
+            catch
+            {
+                // Best-effort cleanup; don't mask the original import error.
+            }
             ExtensionStatusMessage = $"Failed to import CRX: {ex.Message}";
             return;
         }
