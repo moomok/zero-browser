@@ -13,7 +13,8 @@ public sealed record LaunchRequest(
     FingerprintProfile Fingerprint,
     ProxyEntry? Proxy,
     string? StartUrl,
-    bool Headless = false);
+    bool Headless = false,
+    IReadOnlyList<ProfileExtension>? Extensions = null);
 
 public interface IBrowserSession : IAsyncDisposable
 {

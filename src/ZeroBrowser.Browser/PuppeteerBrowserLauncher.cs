@@ -24,10 +24,21 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
     {
         Directory.CreateDirectory(request.Profile.StoragePath);
 
-        // Make sure we have a Chromium binary available locally.
-        // PuppeteerSharp's BrowserFetcher downloads Chromium-for-Testing on first use.
-        var fetcher = new BrowserFetcher();
-        await fetcher.DownloadAsync().ConfigureAwait(false);
+        // Resolve which Chromium binary to launch. If the profile pins an
+        // installed branded build (Chrome, Brave, Edge, …) and the file still
+        // exists, we use that. Otherwise we fall back to PuppeteerSharp's
+        // bundled Chromium-for-Testing build (BrowserFetcher downloads on
+        // first use).
+        string? executablePath = null;
+        if (!string.IsNullOrWhiteSpace(request.Profile.EnginePath) && File.Exists(request.Profile.EnginePath))
+        {
+            executablePath = request.Profile.EnginePath;
+        }
+        else
+        {
+            var fetcher = new BrowserFetcher();
+            await fetcher.DownloadAsync().ConfigureAwait(false);
+        }
 
         var args = new List<string>
         {
@@ -51,10 +62,37 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
             args.Add($"--proxy-server={scheme}://{request.Proxy.Host}:{request.Proxy.Port}");
         }
 
+        // Sideload extensions: only include enabled ones whose folders still
+        // exist on disk. Chromium accepts a comma-separated list to
+        // --load-extension. When running on the deterministic
+        // Chromium-for-Testing build we additionally pin the set with
+        // --disable-extensions-except so the binary's own state can't drift
+        // between runs. When running on a user-installed branded browser we
+        // intentionally do NOT pin — that would prevent Web Store extensions
+        // the user installs interactively from running.
+        if (request.Extensions is { Count: > 0 })
+        {
+            var paths = request.Extensions
+                .Where(e => e.Enabled && !string.IsNullOrWhiteSpace(e.Path) && Directory.Exists(e.Path))
+                .Select(e => e.Path!)
+                .ToArray();
+
+            if (paths.Length > 0)
+            {
+                var joined = string.Join(",", paths);
+                args.Add($"--load-extension={joined}");
+                if (executablePath is null)
+                {
+                    args.Add($"--disable-extensions-except={joined}");
+                }
+            }
+        }
+
         var launchOptions = new LaunchOptions
         {
             Headless = request.Headless,
             UserDataDir = request.Profile.StoragePath,
+            ExecutablePath = executablePath,
             Args = args.ToArray(),
             DefaultViewport = null,                  // use real window size
             AcceptInsecureCerts = false
