@@ -74,9 +74,10 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
         // user-installed branded browser we intentionally do NOT pin — that
         // would prevent Web Store extensions the user installs interactively
         // from running.
+        string[]? loadExtensionPaths = null;
         if (request.Extensions is { Count: > 0 })
         {
-            var paths = request.Extensions
+            loadExtensionPaths = request.Extensions
                 .Where(e => e.Enabled
                             && !string.IsNullOrWhiteSpace(e.Path)
                             && !e.Path!.Contains(',')
@@ -84,9 +85,9 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
                 .Select(e => e.Path!)
                 .ToArray();
 
-            if (paths.Length > 0)
+            if (loadExtensionPaths.Length > 0)
             {
-                var joined = string.Join(",", paths);
+                var joined = string.Join(",", loadExtensionPaths);
                 args.Add($"--load-extension={joined}");
                 if (executablePath is null)
                 {
@@ -95,12 +96,33 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
             }
         }
 
+        // PuppeteerSharp's DefaultArgs include "--disable-extensions" which
+        // unconditionally blocks every extension at startup, including
+        // anything passed via --load-extension and any Web Store extensions
+        // the user has previously installed in this profile's user-data-dir.
+        //
+        // - On Chromium-for-Testing we already counter this with
+        //   --disable-extensions-except=<paths> (Chrome treats this as an
+        //   override of --disable-extensions for the whitelisted folders).
+        // - On a branded build we explicitly want Web Store extensions and
+        //   the user's interactive installs to work, so we drop
+        //   --disable-extensions from the defaults entirely. We always do
+        //   this in branded mode (not just when sideloading) so a profile
+        //   that uses Chrome with no sideloaded extensions can still install
+        //   from the Web Store the next time it launches.
+        string[]? ignoredDefaultArgs = null;
+        if (executablePath is not null)
+        {
+            ignoredDefaultArgs = new[] { "--disable-extensions" };
+        }
+
         var launchOptions = new LaunchOptions
         {
             Headless = request.Headless,
             UserDataDir = request.Profile.StoragePath,
             ExecutablePath = executablePath,
             Args = args.ToArray(),
+            IgnoredDefaultArgs = ignoredDefaultArgs,
             DefaultViewport = null,                  // use real window size
             AcceptInsecureCerts = false
         };
