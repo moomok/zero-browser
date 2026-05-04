@@ -64,16 +64,23 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
 
         // Sideload extensions: only include enabled ones whose folders still
         // exist on disk. Chromium accepts a comma-separated list to
-        // --load-extension. When running on the deterministic
-        // Chromium-for-Testing build we additionally pin the set with
-        // --disable-extensions-except so the binary's own state can't drift
-        // between runs. When running on a user-installed branded browser we
-        // intentionally do NOT pin — that would prevent Web Store extensions
-        // the user installs interactively from running.
+        // --load-extension. The flag has no escape mechanism, so a path
+        // containing a comma would be parsed as two separate (invalid) paths.
+        // We filter those out here as a defensive guard — the UI also rejects
+        // such paths at folder-pick time, and CRX imports use GUIDed names.
+        // When running on the deterministic Chromium-for-Testing build we
+        // additionally pin the set with --disable-extensions-except so the
+        // binary's own state can't drift between runs. When running on a
+        // user-installed branded browser we intentionally do NOT pin — that
+        // would prevent Web Store extensions the user installs interactively
+        // from running.
         if (request.Extensions is { Count: > 0 })
         {
             var paths = request.Extensions
-                .Where(e => e.Enabled && !string.IsNullOrWhiteSpace(e.Path) && Directory.Exists(e.Path))
+                .Where(e => e.Enabled
+                            && !string.IsNullOrWhiteSpace(e.Path)
+                            && !e.Path!.Contains(',')
+                            && Directory.Exists(e.Path))
                 .Select(e => e.Path!)
                 .ToArray();
 

@@ -102,6 +102,26 @@ public class CrxImporterTests : IDisposable
     }
 
     [Fact]
+    public void Throws_on_v2_header_with_uint_overflow_lengths()
+    {
+        // pubKeyLen=0xFFFFFFF0 and sigLen=0x4 used to overflow when cast to int
+        // (int)0xFFFFFFF0 = -16, so 16 + (-16) + 4 = 4 — a positive offset
+        // pointing into the CRX header itself, bypassing the bounds check.
+        // After the fix, arithmetic happens in long space and rejects this.
+        var bad = Path.Combine(_tempRoot, "overflow.crx");
+        var bytes = new List<byte>();
+        bytes.AddRange("Cr24"u8.ToArray());
+        bytes.AddRange(BitConverter.GetBytes((uint)2));            // version 2
+        bytes.AddRange(BitConverter.GetBytes(0xFFFFFFF0u));        // pubKeyLen
+        bytes.AddRange(BitConverter.GetBytes(0x4u));               // sigLen
+        // Pad with some bytes so file isn't empty.
+        bytes.AddRange(new byte[64]);
+        File.WriteAllBytes(bad, bytes.ToArray());
+        var act = () => CrxImporter.Extract(bad, Path.Combine(_tempRoot, "out"));
+        act.Should().Throw<InvalidDataException>().WithMessage("*past end of file*");
+    }
+
+    [Fact]
     public void Throws_when_archive_has_no_manifest()
     {
         var crxPath = Path.Combine(_tempRoot, "nomanifest.crx");

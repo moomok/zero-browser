@@ -198,6 +198,15 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
         var path = folders[0].TryGetLocalPath();
         if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return;
 
+        // Chromium's --load-extension uses comma as a path separator with no
+        // escape mechanism, so a folder whose path contains a comma cannot be
+        // loaded. Surface this clearly instead of silently breaking at launch.
+        if (path.Contains(','))
+        {
+            ExtensionStatusMessage = "Folder path contains a comma (',') which Chromium cannot load. Move the folder to a path without commas and try again.";
+            return;
+        }
+
         var manifest = Path.Combine(path, "manifest.json");
         if (!File.Exists(manifest))
         {

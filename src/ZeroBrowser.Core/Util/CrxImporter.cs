@@ -40,7 +40,14 @@ public static class CrxImporter
         }
 
         var version = ReadUInt32Le(bytes, 4);
-        int zipOffset;
+
+        // Compute the zip offset in 64-bit space to avoid overflow on a
+        // crafted CRX header. uint values up to 4 GiB cannot safely fit in an
+        // int, and a wrapped negative int could pass the bounds check below
+        // by coincidence and cause extraction from the wrong offset within
+        // the file. We validate the offset against the actual file length
+        // (which is itself an int from File.ReadAllBytes) before casting.
+        long zipOffsetLong;
 
         switch (version)
         {
@@ -51,7 +58,7 @@ public static class CrxImporter
                         throw new InvalidDataException("CRX v2 header truncated.");
                     var pubKeyLen = ReadUInt32Le(bytes, 8);
                     var sigLen    = ReadUInt32Le(bytes, 12);
-                    zipOffset = 16 + (int)pubKeyLen + (int)sigLen;
+                    zipOffsetLong = 16L + pubKeyLen + sigLen;
                     break;
                 }
             case 3:
@@ -60,15 +67,20 @@ public static class CrxImporter
                     if (bytes.Length < 12)
                         throw new InvalidDataException("CRX v3 header truncated.");
                     var headerLen = ReadUInt32Le(bytes, 8);
-                    zipOffset = 12 + (int)headerLen;
+                    zipOffsetLong = 12L + headerLen;
                     break;
                 }
             default:
                 throw new InvalidDataException($"Unsupported CRX version: {version}.");
         }
 
-        if (zipOffset >= bytes.Length)
+        // Lower bound: v3 minimum sensible offset is 12 (12-byte header, empty
+        // protobuf body); v2 minimum is 16 (16-byte header, empty pubkey/sig).
+        // Upper bound: zip data must actually exist after the offset.
+        if (zipOffsetLong < 12 || zipOffsetLong >= bytes.Length)
             throw new InvalidDataException("CRX header points past end of file.");
+
+        var zipOffset = (int)zipOffsetLong;
 
         Directory.CreateDirectory(destinationDir);
 
