@@ -3,7 +3,7 @@
         xmlns:vm="using:ZeroBrowser.App.ViewModels"
         x:Class="ZeroBrowser.App.Views.ProfileEditorWindow"
         x:DataType="vm:ProfileEditorViewModel"
-        Width="640" Height="660"
+        Width="680" Height="740"
         WindowStartupLocation="CenterOwner"
         Icon="/Assets/icon.png"
         Title="{Binding Title}">
@@ -56,6 +56,61 @@
                     <TextBlock Text="Same seed = same fingerprint, every time."
                                FontSize="11" Opacity="0.6" Margin="0,4,0,0"/>
                 </StackPanel>
+
+                <StackPanel>
+                    <TextBlock Text="Engine (Chromium binary)" FontSize="12" Margin="0,0,0,4"/>
+                    <ComboBox ItemsSource="{Binding EngineOptions}"
+                              SelectedItem="{Binding SelectedEngine, Mode=TwoWay}"
+                              HorizontalAlignment="Stretch">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:EngineOption">
+                                <TextBlock Text="{Binding Display}" TextTrimming="CharacterEllipsis"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBlock Text="Pick an installed Chrome / Brave / Edge for full Web Store access. The default 'Chromium for Testing' is deterministic but cannot install Web Store extensions interactively."
+                               FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+
+                <Border BorderBrush="#22000000" BorderThickness="1" CornerRadius="6" Padding="12">
+                    <StackPanel Spacing="6">
+                        <Grid ColumnDefinitions="*,Auto,Auto">
+                            <TextBlock Grid.Column="0" Text="Extensions" FontWeight="SemiBold" FontSize="13"
+                                       VerticalAlignment="Center"/>
+                            <Button   Grid.Column="1" Content="Add folder" Margin="0,0,4,0"
+                                      Command="{Binding AddExtensionFolderCommand}"/>
+                            <Button   Grid.Column="2" Content="Import .crx"
+                                      Command="{Binding AddExtensionCrxCommand}"/>
+                        </Grid>
+
+                        <ItemsControl ItemsSource="{Binding Extensions}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ExtensionItemViewModel">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4,0,0">
+                                        <CheckBox Grid.Column="0" Margin="0,0,8,0"
+                                                  IsChecked="{Binding Enabled, Mode=TwoWay}"
+                                                  ToolTip.Tip="Toggle this extension on/off for the next launch."/>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="{Binding DisplayName}" FontSize="13"/>
+                                            <TextBlock Text="{Binding Path}" FontSize="11" Opacity="0.55"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="2" Content="Remove" FontSize="11"
+                                                Command="{Binding $parent[ItemsControl].((vm:ProfileEditorViewModel)DataContext).RemoveExtensionCommand}"
+                                                CommandParameter="{Binding}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="{Binding ExtensionStatusMessage}"
+                                   FontSize="11" Opacity="0.7" Margin="0,4,0,0"
+                                   IsVisible="{Binding ExtensionStatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+                        <TextBlock Text="Tip: Folder must contain manifest.json. Drop a CRX to auto-extract."
+                                   FontSize="11" Opacity="0.55" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
 
                 <StackPanel>
                     <TextBlock Text="Notes" FontSize="12" Margin="0,0,0,4"/>

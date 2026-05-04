@@ -185,7 +185,7 @@ public sealed class ProfileRepository
         Name      = row.name,
         Path      = row.path,
         Enabled   = row.enabled != 0,
-        SortOrder = row.sort_order,
+        SortOrder = (int)row.sort_order,
         CreatedAt = DateTimeOffset.FromUnixTimeSeconds(row.created_at)
     };
 
@@ -196,5 +196,5 @@ public sealed class ProfileRepository
 
     private sealed record ExtensionRow(
         string id, string profile_id, string name, string path,
-        long enabled, int sort_order, long created_at);
+        long enabled, long sort_order, long created_at);
 }
