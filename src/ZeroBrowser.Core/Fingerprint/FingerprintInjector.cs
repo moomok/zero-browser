@@ -67,7 +67,15 @@ public sealed class FingerprintInjector
         // The JS template below is plain JavaScript, NOT C# string interpolation.
         // We only inject the JSON payload via {payload} placeholder.
         // Keep this file readable; minification can happen later in a build step.
-        var script = JsTemplate.Replace("__FP_PAYLOAD__", payload);
+        //
+        // Defence-in-depth: escape any occurrences of "</script>" and U+2028/U+2029
+        // in the serialized JSON. While the CDP injection context is not HTML, a
+        // future caller might embed the output differently.
+        var sanitized = payload
+            .Replace("</", "<\\/")      // prevent closing tag injection
+            .Replace("\u2028", "\\u2028") // line separator
+            .Replace("\u2029", "\\u2029"); // paragraph separator
+        var script = JsTemplate.Replace("__FP_PAYLOAD__", sanitized);
         return script;
     }
 

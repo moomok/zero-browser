@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -34,6 +35,20 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
     [ObservableProperty] private ProxyOption? _selectedProxy;
     [ObservableProperty] private EngineOption? _selectedEngine;
     [ObservableProperty] private string _extensionStatusMessage = string.Empty;
+
+    // Fingerprint rotation settings.
+    [ObservableProperty] private int _rotationIntervalDays;
+    public ObservableCollection<RotationOption> RotationOptions { get; } = new();
+    [ObservableProperty] private RotationOption? _selectedRotation;
+
+    // Seed history — previous seeds the user can switch back to.
+    public ObservableCollection<SeedHistoryItemViewModel> SeedHistory { get; } = new();
+    [ObservableProperty] private string _seedHistoryStatusMessage = string.Empty;
+
+    // Fingerprint token — portable encrypted identity blob.
+    [ObservableProperty] private string _fingerprintToken = string.Empty;
+    [ObservableProperty] private string _importTokenText = string.Empty;
+    [ObservableProperty] private string _tokenStatusMessage = string.Empty;
 
     // Live preview values that update as the user changes name / OS / seed.
     [ObservableProperty] private string _previewUserAgent = string.Empty;
@@ -102,13 +117,27 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
         {
             foreach (var ext in _profileRepo.ListExtensions(_profile.Id))
                 Extensions.Add(new ExtensionItemViewModel(ext));
+            foreach (var seed in _profileRepo.ListSeedHistory(_profile.Id))
+                SeedHistory.Add(new SeedHistoryItemViewModel(seed));
         }
 
+        // Rotation options.
+        RotationOptions.Add(new RotationOption(0,  "Off (manual only)"));
+        RotationOptions.Add(new RotationOption(1,  "Every day"));
+        RotationOptions.Add(new RotationOption(3,  "Every 3 days"));
+        RotationOptions.Add(new RotationOption(7,  "Every week"));
+        RotationOptions.Add(new RotationOption(14, "Every 2 weeks"));
+        RotationOptions.Add(new RotationOption(30, "Every month"));
+        RotationIntervalDays = _profile.RotationIntervalDays;
+        SelectedRotation = RotationOptions.FirstOrDefault(r => r.Days == _profile.RotationIntervalDays)
+                           ?? RotationOptions[0];
+
         UpdatePreview();
+        RefreshToken();
     }
 
-    partial void OnFingerprintSeedChanged(string value) => UpdatePreview();
-    partial void OnSelectedOsChanged(OsOption? value)   => UpdatePreview();
+    partial void OnFingerprintSeedChanged(string value) { UpdatePreview(); RefreshToken(); }
+    partial void OnSelectedOsChanged(OsOption? value)   { UpdatePreview(); RefreshToken(); }
 
     private void UpdatePreview()
     {
@@ -137,8 +166,135 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
     [RelayCommand]
     private void Regenerate()
     {
+        // Archive the current seed before regenerating.
+        if (!string.IsNullOrWhiteSpace(FingerprintSeed))
+        {
+            var entry = new SeedHistoryEntry
+            {
+                Id        = Guid.NewGuid(),
+                ProfileId = _profile.Id,
+                Seed      = FingerprintSeed,
+                Label     = $"Before regenerate {DateTime.Now:yyyy-MM-dd HH:mm}"
+            };
+            SeedHistory.Insert(0, new SeedHistoryItemViewModel(entry));
+        }
         FingerprintSeed = Guid.NewGuid().ToString("N");
         // OnFingerprintSeedChanged will fire UpdatePreview()
+    }
+
+    [RelayCommand]
+    private void SwitchToSeed(SeedHistoryItemViewModel? item)
+    {
+        if (item is null) return;
+        // Archive current seed first.
+        if (!string.IsNullOrWhiteSpace(FingerprintSeed) && FingerprintSeed != item.Seed)
+        {
+            var entry = new SeedHistoryEntry
+            {
+                Id        = Guid.NewGuid(),
+                ProfileId = _profile.Id,
+                Seed      = FingerprintSeed,
+                Label     = $"Switched away {DateTime.Now:yyyy-MM-dd HH:mm}"
+            };
+            SeedHistory.Insert(0, new SeedHistoryItemViewModel(entry));
+        }
+        FingerprintSeed = item.Seed;
+        SeedHistoryStatusMessage = $"Switched to seed from {item.CreatedDisplay}";
+    }
+
+    [RelayCommand]
+    private void RemoveSeedHistory(SeedHistoryItemViewModel? item)
+    {
+        if (item is null) return;
+        SeedHistory.Remove(item);
+        SeedHistoryStatusMessage = "Removed seed from history.";
+    }
+
+    private void RefreshToken()
+    {
+        if (string.IsNullOrWhiteSpace(FingerprintSeed))
+        {
+            FingerprintToken = string.Empty;
+            return;
+        }
+        try
+        {
+            FingerprintToken = FingerprintTokenCodec.Generate(
+                FingerprintSeed,
+                SelectedOs?.Os,
+                SelectedRotation?.Days ?? 0);
+        }
+        catch
+        {
+            FingerprintToken = "(token generation failed)";
+        }
+    }
+
+    [RelayCommand]
+    private void GenerateNewToken()
+    {
+        RefreshToken();
+        TokenStatusMessage = "Token regenerated.";
+    }
+
+    [RelayCommand]
+    private async Task CopyTokenAsync()
+    {
+        if (string.IsNullOrWhiteSpace(FingerprintToken)) return;
+        var topLevel = ResolveTopLevel();
+        if (topLevel?.Clipboard is not { } clipboard)
+        {
+            TokenStatusMessage = "Select the token text and copy manually (Ctrl+C).";
+            return;
+        }
+        try
+        {
+            await clipboard.SetTextAsync(FingerprintToken);
+            TokenStatusMessage = "Token copied to clipboard.";
+        }
+        catch
+        {
+            TokenStatusMessage = "Select the token text and copy manually (Ctrl+C).";
+        }
+    }
+
+    [RelayCommand]
+    private void ImportToken()
+    {
+        if (string.IsNullOrWhiteSpace(ImportTokenText))
+        {
+            TokenStatusMessage = "Paste a token first.";
+            return;
+        }
+
+        var result = FingerprintTokenCodec.Parse(ImportTokenText.Trim());
+        if (result is null)
+        {
+            TokenStatusMessage = "Invalid token — could not decrypt.";
+            return;
+        }
+
+        // Archive current seed before importing.
+        if (!string.IsNullOrWhiteSpace(FingerprintSeed) && FingerprintSeed != result.Seed)
+        {
+            var entry = new SeedHistoryEntry
+            {
+                Id        = Guid.NewGuid(),
+                ProfileId = _profile.Id,
+                Seed      = FingerprintSeed,
+                Label     = $"Before token import {DateTime.Now:yyyy-MM-dd HH:mm}"
+            };
+            SeedHistory.Insert(0, new SeedHistoryItemViewModel(entry));
+        }
+
+        FingerprintSeed = result.Seed;
+        if (result.PinnedOs is { } os)
+            SelectedOs = OsOptions.FirstOrDefault(o => o.Os == os) ?? SelectedOs;
+        if (result.RotationDays > 0)
+            SelectedRotation = RotationOptions.FirstOrDefault(r => r.Days == result.RotationDays) ?? SelectedRotation;
+
+        ImportTokenText = string.Empty;
+        TokenStatusMessage = $"Imported fingerprint from token (v{result.Version}).";
     }
 
     [RelayCommand]
@@ -153,6 +309,11 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
         _profile.PinnedOs = SelectedOs?.Os;
         _profile.ProxyId = SelectedProxy?.Id;
         _profile.EnginePath = SelectedEngine?.Path;
+        _profile.RotationIntervalDays = SelectedRotation?.Days ?? 0;
+        // Set LastRotatedAt on first save if rotation is enabled and not already set.
+        if (_profile.RotationIntervalDays > 0 && _profile.LastRotatedAt is null)
+            _profile.LastRotatedAt = DateTimeOffset.UtcNow;
+        _profile.FingerprintToken = string.IsNullOrWhiteSpace(FingerprintToken) ? null : FingerprintToken;
 
         if (_isNew) _profileRepo.Insert(_profile);
         else        _profileRepo.Update(_profile);
@@ -175,6 +336,19 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
         foreach (var (id, _) in stored)
             if (!seen.Contains(id))
                 _profileRepo.DeleteExtension(id);
+
+        // Persist seed history — insert new entries, delete removed ones.
+        var storedSeeds = _profileRepo.ListSeedHistory(_profile.Id).ToDictionary(s => s.Id);
+        var seenSeeds   = new HashSet<Guid>();
+        foreach (var sh in SeedHistory)
+        {
+            seenSeeds.Add(sh.Model.Id);
+            if (!storedSeeds.ContainsKey(sh.Model.Id))
+                _profileRepo.InsertSeedHistory(sh.Model);
+        }
+        foreach (var (seedId, _) in storedSeeds)
+            if (!seenSeeds.Contains(seedId))
+                _profileRepo.DeleteSeedHistory(seedId);
 
         Saved?.Invoke(_profile);
     }
@@ -312,6 +486,22 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
 public sealed record OsOption(OperatingSystemKind? Os, string Display);
 public sealed record ProxyOption(Guid? Id, string Display);
 public sealed record EngineOption(string? Path, string Display);
+public sealed record RotationOption(int Days, string Display);
+
+public sealed partial class SeedHistoryItemViewModel : ObservableObject
+{
+    public SeedHistoryEntry Model { get; }
+
+    public SeedHistoryItemViewModel(SeedHistoryEntry model)
+    {
+        Model = model;
+    }
+
+    public string Seed           => Model.Seed;
+    public string SeedShort      => Model.Seed.Length > 12 ? Model.Seed[..12] + "…" : Model.Seed;
+    public string Label          => Model.Label ?? "(no label)";
+    public string CreatedDisplay => Model.CreatedAt.LocalDateTime.ToString("g");
+}
 
 public sealed partial class ExtensionItemViewModel : ObservableObject
 {

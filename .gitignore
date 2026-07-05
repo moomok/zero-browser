@@ -51,3 +51,14 @@ logs/
 
 ## Release pipeline staging
 installer/windows/_stage/
+
+## Build output
+publish/
+*.zip
+
+## Kilo / AI coding tool config
+.kilo/
+.kimchi/
+
+## Install scripts (one-off use)
+dotnet-install.ps1

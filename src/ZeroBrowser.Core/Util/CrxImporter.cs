@@ -87,6 +87,15 @@ public static class CrxImporter
         using (var zipStream = new MemoryStream(bytes, zipOffset, bytes.Length - zipOffset, writable: false))
         using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Read))
         {
+            // Defence against zip-slip: verify every entry resolves within
+            // the destination directory before extracting.
+            var destFull = Path.GetFullPath(destinationDir + Path.DirectorySeparatorChar);
+            foreach (var entry in archive.Entries)
+            {
+                var entryPath = Path.GetFullPath(Path.Combine(destinationDir, entry.FullName));
+                if (!entryPath.StartsWith(destFull, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException($"CRX contains a path-traversal entry: {entry.FullName}");
+            }
             archive.ExtractToDirectory(destinationDir, overwriteFiles: true);
         }
 

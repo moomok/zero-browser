@@ -13,16 +13,18 @@ internal static class FingerprintDataset
     /// <summary>Recent stable Chromium milestone versions (full version strings).</summary>
     public static readonly string[] ChromeVersions =
     {
-        "126.0.6478.127",
-        "126.0.6478.183",
-        "127.0.6533.73",
-        "127.0.6533.100",
-        "128.0.6613.84",
-        "128.0.6613.114",
-        "129.0.6668.58",
-        "129.0.6668.100",
-        "130.0.6723.58",
-        "130.0.6723.91"
+        "145.0.7632.77",
+        "145.0.7632.119",
+        "146.0.7680.81",
+        "146.0.7680.155",
+        "147.0.7727.57",
+        "147.0.7727.119",
+        "148.0.7778.98",
+        "148.0.7778.181",
+        "149.0.7827.55",
+        "149.0.7827.201",
+        "150.0.7871.24",
+        "150.0.7871.47"
     };
 
     public static string MajorOf(string fullVersion) =>
@@ -67,28 +69,43 @@ internal static class FingerprintDataset
             ("Google Inc. (Intel)", "ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)"),
             ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce GTX 1650 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
             ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
-            ("Google Inc. (AMD)", "ANGLE (AMD, AMD Radeon(TM) Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)")
+            ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
+            ("Google Inc. (AMD)", "ANGLE (AMD, AMD Radeon(TM) Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)"),
+            ("Google Inc. (AMD)", "ANGLE (AMD, AMD Radeon RX 7600 Direct3D11 vs_5_0 ps_5_0, D3D11)")
         },
         [OperatingSystemKind.Windows11] = new[]
         {
             ("Google Inc. (Intel)", "ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)"),
+            ("Google Inc. (Intel)", "ANGLE (Intel, Intel(R) Arc(TM) A770 Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)"),
             ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
             ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
-            ("Google Inc. (AMD)", "ANGLE (AMD, AMD Radeon(TM) Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)")
+            ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
+            ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
+            ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
+            ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce RTX 5090 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
+            ("Google Inc. (AMD)", "ANGLE (AMD, AMD Radeon(TM) Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)"),
+            ("Google Inc. (AMD)", "ANGLE (AMD, AMD Radeon RX 7800 XT Direct3D11 vs_5_0 ps_5_0, D3D11)"),
+            ("Google Inc. (AMD)", "ANGLE (AMD, AMD Radeon RX 9070 XT Direct3D11 vs_5_0 ps_5_0, D3D11)")
         },
         [OperatingSystemKind.MacOS] = new[]
         {
             ("Google Inc. (Apple)", "ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)"),
             ("Google Inc. (Apple)", "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"),
             ("Google Inc. (Apple)", "ANGLE (Apple, ANGLE Metal Renderer: Apple M3, Unspecified Version)"),
-            ("Google Inc. (Intel Inc.)", "ANGLE (Intel Inc., Intel(R) Iris(TM) Plus Graphics 645, OpenGL 4.1)")
+            ("Google Inc. (Apple)", "ANGLE (Apple, ANGLE Metal Renderer: Apple M3 Pro, Unspecified Version)"),
+            ("Google Inc. (Apple)", "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)"),
+            ("Google Inc. (Apple)", "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)"),
+            ("Google Inc. (Apple)", "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)")
         },
         [OperatingSystemKind.Linux] = new[]
         {
             ("Mesa", "Mesa Intel(R) UHD Graphics 620 (KBL GT2)"),
             ("Mesa", "Mesa Intel(R) Iris(R) Xe Graphics (TGL GT2)"),
+            ("Mesa", "Mesa Intel(R) Arc(TM) A770 Graphics (DG2)"),
             ("NVIDIA Corporation", "NVIDIA GeForce GTX 1650/PCIe/SSE2"),
-            ("AMD", "AMD Radeon Graphics (RADV RENOIR)")
+            ("NVIDIA Corporation", "NVIDIA GeForce RTX 4060/PCIe/SSE2"),
+            ("AMD", "AMD Radeon Graphics (RADV RENOIR)"),
+            ("AMD", "AMD Radeon RX 7600 (RADV NAVI33)")
         }
     };
 
