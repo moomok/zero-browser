@@ -5,6 +5,7 @@ using ZeroBrowser.App.Views;
 using ZeroBrowser.Browser;
 using ZeroBrowser.Core.Fingerprint;
 using ZeroBrowser.Core.Models;
+using ZeroBrowser.Storage.Cookies;
 using ZeroBrowser.Storage.Sqlite;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -21,6 +22,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public ObservableCollection<ProfileItemViewModel> Profiles { get; } = new();
 
     [ObservableProperty] private string _statusMessage = "Ready";
+
+    [ObservableProperty] private string _searchText = string.Empty;
+    [ObservableProperty] private string _filterTag = string.Empty;
 
     public MainWindowViewModel(ProfileRepository profiles, ProxyRepository proxies, FingerprintGenerator generator, IBrowserLauncher launcher)
     {
@@ -46,9 +50,39 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }).ToList();
         });
         Profiles.Clear();
-        foreach (var item in items)
+        foreach (var item in items.Where(MatchesFilter))
             Profiles.Add(item);
-        StatusMessage = $"{Profiles.Count} profile(s) loaded";
+        StatusMessage = $"{Profiles.Count} profile(s) shown{(Profiles.Count < items.Count ? $" (of {items.Count} total)" : "")}";
+    }
+
+    private bool MatchesFilter(ProfileItemViewModel item)
+    {
+        // Text search matches Name, Notes, or Seed
+        var s = SearchText?.Trim();
+        if (!string.IsNullOrEmpty(s))
+        {
+            if (item.Profile.Name.Contains(s, StringComparison.OrdinalIgnoreCase)) goto tagCheck;
+            if ((item.Profile.Notes ?? "").Contains(s, StringComparison.OrdinalIgnoreCase)) goto tagCheck;
+            if (item.Profile.FingerprintSeed.Contains(s, StringComparison.OrdinalIgnoreCase)) goto tagCheck;
+            return false;
+        }
+        tagCheck:
+        // Tag filter matches any tag contains filter text
+        var t = FilterTag?.Trim();
+        if (!string.IsNullOrEmpty(t))
+        {
+            if (item.Profile.Tags.Count == 0) return false;
+            if (!item.Profile.Tags.Any(tg => tg.Contains(t, StringComparison.OrdinalIgnoreCase))) return false;
+        }
+        return true;
+    }
+
+    [RelayCommand]
+    private void ClearFilters()
+    {
+        SearchText = string.Empty;
+        FilterTag = string.Empty;
+        _ = ReloadAsync();
     }
 
     [RelayCommand]
@@ -222,5 +256,48 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             window.Show();
         }
+    }
+
+    [RelayCommand]
+    private void ExportCookies(ProfileItemViewModel? item)
+    {
+        if (item is null) return;
+        try
+        {
+            var format = "json";
+            var path = CookieStore.ExportToFile(item.Profile.StoragePath, format);
+            StatusMessage = $"Exported cookies to {path} ({format})";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Cookie export failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void ExportCookiesNetscape(ProfileItemViewModel? item)
+    {
+        if (item is null) return;
+        try
+        {
+            var path = CookieStore.ExportToFile(item.Profile.StoragePath, "netscape");
+            StatusMessage = $"Exported cookies to {path} (Netscape)";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Cookie export failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task RunAutomationScriptAsync(ProfileItemViewModel? item)
+    {
+        if (item is null) return;
+        // For now, expose a placeholder: the command expects Node.js and a script path.
+        // In a full integration, we'd watch the launched browser for its CDP endpoint.
+        // Here we show status and refer user to launch first.
+        StatusMessage = "Launch the profile with 'Launch' first, then run your script. " +
+                        "(Use environment variable CDP_WS_URL in your Playwright/Puppeteer script.)";
+        await Task.CompletedTask;
     }
 }

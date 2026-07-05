@@ -52,10 +52,8 @@ Inspirasi: Multilogin / GoLogin / AdsPower / Dolphin Anty / Kameleo — versi op
 - ✅ **Sec-CH-UA grease brand** fix per milestone range (126-130, 131-134, 135-144, 145+)
 
 ### Belum (roadmap)
-- [ ] Cookie *exporter* (export current browser cookies → JSON / Netscape file)
-- [ ] Tag-based filter & search di profile list
-- [ ] JA3/TLS fingerprint diversification (butuh patched Chromium / mitm-impersonate)
-- [ ] Automation runner (Playwright/Puppeteer script per profil)
+- [ ] JA3/TLS fingerprint diversion (butuh curl-impersonate binaries; kolom `tls_diversion_mode` sudah ready di DB untuk toggle Chrome/Firefox/Safari/Edge)
+- [ ] Automation runner UI (Runner + Node.js CDP attach sudah dibuild; tinggal bind UI file picker)
 - [ ] Code signing + auto-update
 
 ---
