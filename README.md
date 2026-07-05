@@ -25,23 +25,20 @@ Inspirasi: Multilogin / GoLogin / AdsPower / Dolphin Anty / Kameleo — versi op
 
 ### Identity & Security
 - ✅ **Master password lock di app start** (Argon2id-derived SecretBox; sensitive data di disk dienkripsi)
-- ✅ **Encrypted fingerprint token** — format portable `base64_key|base64_payload|base64_iv|flags|ver` (AES-256-GCM), bisa di-share antar instance ZeroBrowser untuk clone identitas
-- ✅ **Proxy manager + bulk import** (5 format: `host:port`, `host:port:user:pass`, `user:pass@host:port`, `scheme://host:port`, `scheme://user:pass@host:port`; password dienkripsi at-rest)
-- ✅ **Proxy connectivity test** — Test per-proxy atau Test All, cek via httpbin.org/ip, show latency & status
-- ✅ **SOCKS5 auth fix** — credentials embedded di URL (Chromium tidak handle SOCKS5 auth via 407 challenge)
-- ✅ **Multi-tab proxy auth** — auth applied ke setiap tab baru via TargetCreated event
-- ✅ **Command-injection-proof proxy args** — host/port sanitized sebelum di-interpolate ke Chromium flags
-- ✅ **Zip-slip-proof CRX importer** — path traversal check per entry
-- ✅ **Cookie export permission** — Unix 0600 mode di-set otomatis
-- ✅ **JSON payload sanitization** di fingerprint patch script — tahan script injection
+- ✅ **Encrypted fingerprint token** — format portable `base64_key|base64_payload|base64_iv|flags|ver` (AES-256-GCM)
+- ✅ **Proxy manager + bulk import** + **connectivity test** (Test / Test All via httpbin.org/ip)
+- ✅ **SOCKS5 auth fix** + multi-tab proxy auth
+- ✅ **Command-injection-proof proxy args**, zip-slip-proof CRX importer, cookie file permission restriction
+- ✅ **Cookie exporter** — JSON (Playwright/Puppeteer format) + Netscape (curl/wget format) via Export buttons
 
 ### Profile Management
-- ✅ **Profile editor lengkap** (nama, OS pin, proxy assignment, regenerate seed, rotation, token import/export, notes; live preview)
-- ✅ **Fingerprint preview dialog** (review UA / TZ / GPU / screen / language sebelum launch)
-- ✅ **Fingerprint rotation** — auto-rotate seed tiap X hari (Off/Daily/3d/Weekly/2w/Monthly), seed lama masuk history
-- ✅ **Seed history per profil** — switch kembali ke fingerprint lama kapanpun (Use / Remove)
-- ✅ **Batch create** — 1 klik = 10 profil sekaligus dengan fingerprint unik masing-masing
-- ✅ **Cookie importer** (JSON Puppeteer/Playwright/EditThisCookie + Netscape/curl format → diapply per-profile sebelum navigation)
+- ✅ **Profile editor lengkap** (nama, OS pin, proxy, regenerate seed, rotation, token import/export, notes; live preview)
+- ✅ **Fingerprint preview dialog**
+- ✅ **Fingerprint rotation** — auto-rotate tiap X hari, seed lama masuk history
+- ✅ **Seed history per profil** — switch kembali ke fingerprint lama
+- ✅ **Batch create** — 1 klik = 10 profil sekaligus
+- ✅ **Tag filter & search** — search by name/notes/seed + filter by tag, Clear button
+- ✅ **Cookie importer** (JSON Puppeteer/Playwright/EditThisCookie + Netscape/curl)
 
 ### Performance
 - ✅ **Non-blocking UI** — semua DB query, fingerprint generation, dan filesystem scan (BrowserDetector.Detect) dipindah ke background thread; UI tetap responsif saat buat/list/launch profil
@@ -52,10 +49,8 @@ Inspirasi: Multilogin / GoLogin / AdsPower / Dolphin Anty / Kameleo — versi op
 - ✅ **Sec-CH-UA grease brand** fix per milestone range (126-130, 131-134, 135-144, 145+)
 
 ### Belum (roadmap)
-- [ ] Cookie *exporter* (export current browser cookies → JSON / Netscape file)
-- [ ] Tag-based filter & search di profile list
-- [ ] JA3/TLS fingerprint diversification (butuh patched Chromium / mitm-impersonate)
-- [ ] Automation runner (Playwright/Puppeteer script per profil)
+- [ ] JA3/TLS fingerprint diversion (butuh curl-impersonate binaries; kolom `tls_diversion_mode` sudah ready di DB untuk toggle Chrome/Firefox/Safari/Edge)
+- [ ] Automation runner UI (Runner + Node.js CDP attach sudah dibuild; tinggal bind UI file picker)
 - [ ] Code signing + auto-update
 
 ---

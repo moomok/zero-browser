@@ -19,7 +19,12 @@ public sealed class Profile
     public required string StoragePath { get; init; }
 
     /// <summary>
-    /// Optional override for the Chromium executable. When null, the bundled
+    /// Optional TLS fingerprint diversion mode. "None" (default), "Chrome", "Firefox", "Safari", "Edge".
+    /// When enabled, an external curl-impersonate process acts as TLS proxy between Chromium
+    /// and the target server, spoofing JA3/JA4 signatures to match the selected browser profile.
+    /// Requires curl-impersonate binaries installed on the host.
+    /// </summary>
+    public string TlsDiversionMode { get; set; } = "None";
     /// Chromium-for-Testing build (downloaded by PuppeteerSharp's BrowserFetcher)
     /// is used. When set, points to an absolute path of an installed Chromium-based
     /// browser (Google Chrome, Brave, Edge, …) so the profile can use the real

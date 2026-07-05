@@ -43,9 +43,9 @@ public sealed class ProfileRepository
         conn.Execute(
             """
             INSERT INTO profiles
-              (id, name, notes, group_id, tags, fingerprint_seed, pinned_os, proxy_id, storage_path, engine_path, created_at, last_used_at, rotation_interval_days, last_rotated_at, fingerprint_token)
+              (id, name, notes, group_id, tags, fingerprint_seed, pinned_os, proxy_id, storage_path, engine_path, created_at, last_used_at, rotation_interval_days, last_rotated_at, fingerprint_token, tls_diversion_mode)
             VALUES
-              (@Id, @Name, @Notes, @GroupId, @Tags, @FingerprintSeed, @PinnedOs, @ProxyId, @StoragePath, @EnginePath, @CreatedAt, @LastUsedAt, @RotationIntervalDays, @LastRotatedAt, @FingerprintToken);
+              (@Id, @Name, @Notes, @GroupId, @Tags, @FingerprintSeed, @PinnedOs, @ProxyId, @StoragePath, @EnginePath, @CreatedAt, @LastUsedAt, @RotationIntervalDays, @LastRotatedAt, @FingerprintToken, @TlsDiversionMode);
             """, new
             {
                 Id = p.Id.ToString(),
@@ -62,7 +62,8 @@ public sealed class ProfileRepository
                 LastUsedAt = p.LastUsedAt?.ToUnixTimeSeconds(),
                 RotationIntervalDays = p.RotationIntervalDays,
                 LastRotatedAt = p.LastRotatedAt?.ToUnixTimeSeconds(),
-                p.FingerprintToken
+                p.FingerprintToken,
+                TlsDiversionMode = p.TlsDiversionMode
             });
     }
 
@@ -83,7 +84,8 @@ public sealed class ProfileRepository
               last_used_at = @LastUsedAt,
               rotation_interval_days = @RotationIntervalDays,
               last_rotated_at = @LastRotatedAt,
-              fingerprint_token = @FingerprintToken
+              fingerprint_token = @FingerprintToken,
+              tls_diversion_mode = @TlsDiversionMode
             WHERE id = @Id;
             """, new
             {
@@ -99,7 +101,8 @@ public sealed class ProfileRepository
                 LastUsedAt = p.LastUsedAt?.ToUnixTimeSeconds(),
                 RotationIntervalDays = p.RotationIntervalDays,
                 LastRotatedAt = p.LastRotatedAt?.ToUnixTimeSeconds(),
-                p.FingerprintToken
+                p.FingerprintToken,
+                TlsDiversionMode = p.TlsDiversionMode
             });
     }
 
@@ -187,7 +190,8 @@ public sealed class ProfileRepository
         LastUsedAt      = row.last_used_at is null ? null : DateTimeOffset.FromUnixTimeSeconds(row.last_used_at.Value),
         RotationIntervalDays = (int)row.rotation_interval_days,
         LastRotatedAt   = row.last_rotated_at is null ? null : DateTimeOffset.FromUnixTimeSeconds(row.last_rotated_at.Value),
-        FingerprintToken = row.fingerprint_token
+        FingerprintToken = row.fingerprint_token,
+        TlsDiversionMode = row.tls_diversion_mode ?? "None"
     };
 
     private static ProfileExtension MapExt(ExtensionRow row) => new()
@@ -205,7 +209,8 @@ public sealed class ProfileRepository
         string id, string name, string? notes, string? group_id,
         string? tags, string fingerprint_seed, string? pinned_os, string? proxy_id,
         string storage_path, string? engine_path, long created_at, long? last_used_at,
-        long rotation_interval_days, long? last_rotated_at, string? fingerprint_token);
+        long rotation_interval_days, long? last_rotated_at, string? fingerprint_token,
+        string? tls_diversion_mode);
 
     // ---- Seed History ----
 

@@ -74,6 +74,7 @@ public static class Schema
         TryAddColumn(conn, "profiles", "rotation_interval_days", "INTEGER NOT NULL DEFAULT 0");
         TryAddColumn(conn, "profiles", "last_rotated_at", "INTEGER");
         TryAddColumn(conn, "profiles", "fingerprint_token", "TEXT");
+        TryAddColumn(conn, "profiles", "tls_diversion_mode", "TEXT NOT NULL DEFAULT 'None'");
     }
 
     private static void TryAddColumn(SqliteConnection conn, string table, string column, string type)
