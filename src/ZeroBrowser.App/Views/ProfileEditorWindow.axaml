@@ -3,7 +3,7 @@
         xmlns:vm="using:ZeroBrowser.App.ViewModels"
         x:Class="ZeroBrowser.App.Views.ProfileEditorWindow"
         x:DataType="vm:ProfileEditorViewModel"
-        Width="680" Height="740"
+        Width="680" Height="960"
         WindowStartupLocation="CenterOwner"
         Icon="/Assets/icon.png"
         Title="{Binding Title}">
@@ -56,6 +56,88 @@
                     <TextBlock Text="Same seed = same fingerprint, every time."
                                FontSize="11" Opacity="0.6" Margin="0,4,0,0"/>
                 </StackPanel>
+
+                <StackPanel>
+                    <TextBlock Text="Fingerprint rotation" FontSize="12" Margin="0,0,0,4"/>
+                    <ComboBox ItemsSource="{Binding RotationOptions}"
+                              SelectedItem="{Binding SelectedRotation, Mode=TwoWay}"
+                              HorizontalAlignment="Stretch">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:RotationOption">
+                                <TextBlock Text="{Binding Display}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBlock Text="When enabled, the fingerprint seed auto-rotates before launch. Old seeds are archived."
+                               FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+
+                <Border BorderBrush="#22000000" BorderThickness="1" CornerRadius="6" Padding="12">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Seed history" FontWeight="SemiBold" FontSize="13"/>
+                        <TextBlock Text="Switch back to a previously used fingerprint identity."
+                                   FontSize="11" Opacity="0.55" TextWrapping="Wrap"/>
+                        <ItemsControl ItemsSource="{Binding SeedHistory}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:SeedHistoryItemViewModel">
+                                    <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,4,0,0">
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="{Binding SeedShort}" FontFamily="Consolas,Menlo,monospace"
+                                                       FontSize="12"/>
+                                            <TextBlock FontSize="11" Opacity="0.55">
+                                                <TextBlock.Text>
+                                                    <MultiBinding StringFormat="{}{0} — {1}">
+                                                        <Binding Path="Label"/>
+                                                        <Binding Path="CreatedDisplay"/>
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Content="Use" FontSize="11" Padding="8,4" Margin="4,0"
+                                                ToolTip.Tip="Switch to this seed"
+                                                Command="{Binding $parent[ItemsControl].((vm:ProfileEditorViewModel)DataContext).SwitchToSeedCommand}"
+                                                CommandParameter="{Binding}"/>
+                                        <Button Grid.Column="2" Content="Remove" FontSize="11" Padding="8,4"
+                                                Command="{Binding $parent[ItemsControl].((vm:ProfileEditorViewModel)DataContext).RemoveSeedHistoryCommand}"
+                                                CommandParameter="{Binding}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="{Binding SeedHistoryStatusMessage}"
+                                   FontSize="11" Opacity="0.7" Margin="0,4,0,0"
+                                   IsVisible="{Binding SeedHistoryStatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    </StackPanel>
+                </Border>
+
+                <Border BorderBrush="#22000000" BorderThickness="1" CornerRadius="6" Padding="12">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Fingerprint token" FontWeight="SemiBold" FontSize="13"/>
+                        <TextBlock Text="Portable encrypted identity. Share this token to clone the fingerprint on another ZeroBrowser instance."
+                                   FontSize="11" Opacity="0.55" TextWrapping="Wrap"/>
+                        <TextBox Text="{Binding FingerprintToken, Mode=OneWay}" IsReadOnly="True"
+                                 FontFamily="Consolas,Menlo,monospace" FontSize="10"
+                                 TextWrapping="Wrap" MaxHeight="60"/>
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <Button Content="Copy token" FontSize="11" Padding="8,4"
+                                    Command="{Binding CopyTokenCommand}"/>
+                            <Button Content="Regenerate token" FontSize="11" Padding="8,4"
+                                    Command="{Binding GenerateNewTokenCommand}"/>
+                        </StackPanel>
+
+                        <TextBlock Text="Import token" FontSize="12" Margin="0,8,0,4"/>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBox Grid.Column="0" Text="{Binding ImportTokenText, Mode=TwoWay}"
+                                     PlaceholderText="Paste a fingerprint token here..."
+                                     FontFamily="Consolas,Menlo,monospace" FontSize="10"/>
+                            <Button Grid.Column="1" Content="Import" Margin="8,0,0,0"
+                                    Command="{Binding ImportTokenCommand}"/>
+                        </Grid>
+                        <TextBlock Text="{Binding TokenStatusMessage}"
+                                   FontSize="11" Opacity="0.7" Margin="0,4,0,0"
+                                   IsVisible="{Binding TokenStatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    </StackPanel>
+                </Border>
 
                 <StackPanel>
                     <TextBlock Text="Engine (Chromium binary)" FontSize="12" Margin="0,0,0,4"/>

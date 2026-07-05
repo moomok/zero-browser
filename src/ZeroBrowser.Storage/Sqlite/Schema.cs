@@ -46,9 +46,19 @@ public static class Schema
             FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS seed_history (
+            id          TEXT PRIMARY KEY,
+            profile_id  TEXT NOT NULL,
+            seed        TEXT NOT NULL,
+            label       TEXT,
+            created_at  INTEGER NOT NULL,
+            FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+        );
+
         CREATE INDEX IF NOT EXISTS idx_profiles_group ON profiles(group_id);
         CREATE INDEX IF NOT EXISTS idx_profiles_proxy ON profiles(proxy_id);
         CREATE INDEX IF NOT EXISTS idx_extensions_profile ON profile_extensions(profile_id);
+        CREATE INDEX IF NOT EXISTS idx_seed_history_profile ON seed_history(profile_id);
         """;
 
     public static void Apply(SqliteConnection conn)
@@ -61,6 +71,9 @@ public static class Schema
         // already exists; we swallow that and continue.
         TryAddColumn(conn, "profiles", "pinned_os",   "TEXT");
         TryAddColumn(conn, "profiles", "engine_path", "TEXT");
+        TryAddColumn(conn, "profiles", "rotation_interval_days", "INTEGER NOT NULL DEFAULT 0");
+        TryAddColumn(conn, "profiles", "last_rotated_at", "INTEGER");
+        TryAddColumn(conn, "profiles", "fingerprint_token", "TEXT");
     }
 
     private static void TryAddColumn(SqliteConnection conn, string table, string column, string type)

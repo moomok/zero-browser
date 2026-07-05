@@ -43,9 +43,9 @@ public sealed class ProfileRepository
         conn.Execute(
             """
             INSERT INTO profiles
-              (id, name, notes, group_id, tags, fingerprint_seed, pinned_os, proxy_id, storage_path, engine_path, created_at, last_used_at)
+              (id, name, notes, group_id, tags, fingerprint_seed, pinned_os, proxy_id, storage_path, engine_path, created_at, last_used_at, rotation_interval_days, last_rotated_at, fingerprint_token)
             VALUES
-              (@Id, @Name, @Notes, @GroupId, @Tags, @FingerprintSeed, @PinnedOs, @ProxyId, @StoragePath, @EnginePath, @CreatedAt, @LastUsedAt);
+              (@Id, @Name, @Notes, @GroupId, @Tags, @FingerprintSeed, @PinnedOs, @ProxyId, @StoragePath, @EnginePath, @CreatedAt, @LastUsedAt, @RotationIntervalDays, @LastRotatedAt, @FingerprintToken);
             """, new
             {
                 Id = p.Id.ToString(),
@@ -59,7 +59,10 @@ public sealed class ProfileRepository
                 p.StoragePath,
                 p.EnginePath,
                 CreatedAt = p.CreatedAt.ToUnixTimeSeconds(),
-                LastUsedAt = p.LastUsedAt?.ToUnixTimeSeconds()
+                LastUsedAt = p.LastUsedAt?.ToUnixTimeSeconds(),
+                RotationIntervalDays = p.RotationIntervalDays,
+                LastRotatedAt = p.LastRotatedAt?.ToUnixTimeSeconds(),
+                p.FingerprintToken
             });
     }
 
@@ -77,7 +80,10 @@ public sealed class ProfileRepository
               pinned_os = @PinnedOs,
               proxy_id = @ProxyId,
               engine_path = @EnginePath,
-              last_used_at = @LastUsedAt
+              last_used_at = @LastUsedAt,
+              rotation_interval_days = @RotationIntervalDays,
+              last_rotated_at = @LastRotatedAt,
+              fingerprint_token = @FingerprintToken
             WHERE id = @Id;
             """, new
             {
@@ -90,7 +96,10 @@ public sealed class ProfileRepository
                 PinnedOs = p.PinnedOs?.ToString(),
                 ProxyId = p.ProxyId?.ToString(),
                 p.EnginePath,
-                LastUsedAt = p.LastUsedAt?.ToUnixTimeSeconds()
+                LastUsedAt = p.LastUsedAt?.ToUnixTimeSeconds(),
+                RotationIntervalDays = p.RotationIntervalDays,
+                LastRotatedAt = p.LastRotatedAt?.ToUnixTimeSeconds(),
+                p.FingerprintToken
             });
     }
 
@@ -175,7 +184,10 @@ public sealed class ProfileRepository
         StoragePath     = row.storage_path,
         EnginePath      = row.engine_path,
         CreatedAt       = DateTimeOffset.FromUnixTimeSeconds(row.created_at),
-        LastUsedAt      = row.last_used_at is null ? null : DateTimeOffset.FromUnixTimeSeconds(row.last_used_at.Value)
+        LastUsedAt      = row.last_used_at is null ? null : DateTimeOffset.FromUnixTimeSeconds(row.last_used_at.Value),
+        RotationIntervalDays = (int)row.rotation_interval_days,
+        LastRotatedAt   = row.last_rotated_at is null ? null : DateTimeOffset.FromUnixTimeSeconds(row.last_rotated_at.Value),
+        FingerprintToken = row.fingerprint_token
     };
 
     private static ProfileExtension MapExt(ExtensionRow row) => new()
@@ -192,7 +204,54 @@ public sealed class ProfileRepository
     private sealed record ProfileRow(
         string id, string name, string? notes, string? group_id,
         string? tags, string fingerprint_seed, string? pinned_os, string? proxy_id,
-        string storage_path, string? engine_path, long created_at, long? last_used_at);
+        string storage_path, string? engine_path, long created_at, long? last_used_at,
+        long rotation_interval_days, long? last_rotated_at, string? fingerprint_token);
+
+    // ---- Seed History ----
+
+    public IReadOnlyList<SeedHistoryEntry> ListSeedHistory(Guid profileId)
+    {
+        using var conn = Open();
+        var rows = conn.Query<SeedHistoryRow>(
+            "SELECT * FROM seed_history WHERE profile_id = @pid ORDER BY created_at DESC",
+            new { pid = profileId.ToString() }).ToList();
+        return rows.Select(MapSeed).ToList();
+    }
+
+    public void InsertSeedHistory(SeedHistoryEntry e)
+    {
+        using var conn = Open();
+        conn.Execute(
+            """
+            INSERT INTO seed_history (id, profile_id, seed, label, created_at)
+            VALUES (@Id, @ProfileId, @Seed, @Label, @CreatedAt);
+            """, new
+            {
+                Id = e.Id.ToString(),
+                ProfileId = e.ProfileId.ToString(),
+                e.Seed,
+                e.Label,
+                CreatedAt = e.CreatedAt.ToUnixTimeSeconds()
+            });
+    }
+
+    public void DeleteSeedHistory(Guid id)
+    {
+        using var conn = Open();
+        conn.Execute("DELETE FROM seed_history WHERE id = @id", new { id = id.ToString() });
+    }
+
+    private static SeedHistoryEntry MapSeed(SeedHistoryRow row) => new()
+    {
+        Id        = Guid.Parse(row.id),
+        ProfileId = Guid.Parse(row.profile_id),
+        Seed      = row.seed,
+        Label     = row.label,
+        CreatedAt = DateTimeOffset.FromUnixTimeSeconds(row.created_at)
+    };
+
+    private sealed record SeedHistoryRow(
+        string id, string profile_id, string seed, string? label, long created_at);
 
     private sealed record ExtensionRow(
         string id, string profile_id, string name, string path,

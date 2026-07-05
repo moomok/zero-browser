@@ -33,6 +33,7 @@ public sealed class FingerprintGenerator
         // Browser version
         var browserVersion = rnd.Pick(FingerprintDataset.ChromeVersions);
         var majorVersion = FingerprintDataset.MajorOf(browserVersion);
+        var majorVersionInt = int.Parse(majorVersion);
 
         // Platform strings
         var (platform, secChUaPlatform, osCpu, uaOs) = FingerprintDataset.GetPlatformStrings(os);
@@ -40,10 +41,21 @@ public sealed class FingerprintGenerator
         // User agent — Chrome's UA stays "Mozilla/5.0 (...) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/<v> Safari/537.36"
         var ua = $"Mozilla/5.0 ({uaOs}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{browserVersion} Safari/537.36";
 
-        // Sec-CH-UA: brand list with the right grease entry shape that Chrome uses.
-        // Chrome 126+ format uses three brand entries: Not/A)Brand, Chromium, Google Chrome
+        // Sec-CH-UA: brand list with the grease entry shape that Chrome uses.
+        // The grease brand changes across milestones:
+        //   Chrome 126-130: "Not/A)Brand";v="8"
+        //   Chrome 131-134: "Not?A_Brand";v="8"
+        //   Chrome 135-144: "Not)A;Brand";v="99"
+        //   Chrome 145+:    "Not:A-Brand";v="8"
+        string greaseBrand;
+        string greaseVersion;
+        if (majorVersionInt >= 145) { greaseBrand = "Not:A-Brand"; greaseVersion = "8"; }
+        else if (majorVersionInt >= 135) { greaseBrand = "Not)A;Brand"; greaseVersion = "99"; }
+        else if (majorVersionInt >= 131) { greaseBrand = "Not?A_Brand"; greaseVersion = "8"; }
+        else { greaseBrand = "Not/A)Brand"; greaseVersion = "8"; }
+
         var secChUa =
-            $"\"Not/A)Brand\";v=\"8\", \"Chromium\";v=\"{majorVersion}\", \"Google Chrome\";v=\"{majorVersion}\"";
+            $"\"{greaseBrand}\";v=\"{greaseVersion}\", \"Chromium\";v=\"{majorVersion}\", \"Google Chrome\";v=\"{majorVersion}\"";
 
         // Hardware
         var hardwareConcurrency = rnd.Pick(FingerprintDataset.HardwareConcurrencyOptions);

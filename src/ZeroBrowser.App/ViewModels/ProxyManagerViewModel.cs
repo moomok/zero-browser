@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.Net;
+using System.Net.Http;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ZeroBrowser.Core.Models;
@@ -60,9 +62,88 @@ public sealed partial class ProxyManagerViewModel : ObservableObject
         _repo.Delete(item.Entry.Id);
         Reload();
     }
+
+    [RelayCommand]
+    private async Task TestProxyAsync(ProxyItemViewModel? item)
+    {
+        if (item is null) return;
+        item.TestStatus = "testing…";
+        StatusMessage = $"Testing {item.Display}…";
+
+        try
+        {
+            var proxy = item.Entry;
+            var handler = new HttpClientHandler
+            {
+                UseProxy = true,
+                Proxy = CreateWebProxy(proxy)
+            };
+
+            using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var response = await client.GetAsync("https://httpbin.org/ip");
+            sw.Stop();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                item.TestStatus = $"OK ({sw.ElapsedMilliseconds}ms)";
+                StatusMessage = $"{item.Display} — connected in {sw.ElapsedMilliseconds}ms";
+            }
+            else
+            {
+                item.TestStatus = $"HTTP {(int)response.StatusCode}";
+                StatusMessage = $"{item.Display} — HTTP {(int)response.StatusCode}";
+            }
+        }
+        catch (TaskCanceledException)
+        {
+            item.TestStatus = "timeout";
+            StatusMessage = $"{item.Display} — connection timed out (15s)";
+        }
+        catch (HttpRequestException ex)
+        {
+            item.TestStatus = "failed";
+            StatusMessage = $"{item.Display} — {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            item.TestStatus = "error";
+            StatusMessage = $"{item.Display} — {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task TestAllAsync()
+    {
+        StatusMessage = $"Testing {Proxies.Count} proxies…";
+        foreach (var p in Proxies)
+        {
+            await TestProxyAsync(p);
+        }
+        var ok = Proxies.Count(p => p.TestStatus?.StartsWith("OK") == true);
+        StatusMessage = $"Done: {ok}/{Proxies.Count} proxies connected successfully.";
+    }
+
+    private static WebProxy CreateWebProxy(ProxyEntry proxy)
+    {
+        var scheme = proxy.Type switch
+        {
+            ProxyType.Http   => "http",
+            ProxyType.Https  => "https",
+            ProxyType.Socks5 => "socks5",
+            _ => "http"
+        };
+        var wp = new WebProxy($"{scheme}://{proxy.Host}:{proxy.Port}");
+        if (proxy.Username is not null && proxy.Password is not null)
+        {
+            wp.Credentials = new NetworkCredential(proxy.Username, proxy.Password);
+        }
+        return wp;
+    }
 }
 
-public sealed class ProxyItemViewModel : ObservableObject
+public sealed partial class ProxyItemViewModel : ObservableObject
 {
     public ProxyEntry Entry { get; }
 
@@ -74,4 +155,6 @@ public sealed class ProxyItemViewModel : ObservableObject
     public int    Port     => Entry.Port;
     public string Auth     => Entry.Username is null ? "—" : $"{Entry.Username}:••••";
     public string Status   => Entry.Status ?? "untested";
+
+    [ObservableProperty] private string? _testStatus;
 }

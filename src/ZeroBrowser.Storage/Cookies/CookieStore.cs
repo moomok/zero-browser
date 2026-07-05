@@ -40,6 +40,17 @@ public static class CookieStore
         Directory.CreateDirectory(profileStorageDir);
         var path = PathFor(profileStorageDir);
         File.WriteAllText(path, JsonSerializer.Serialize(cookies, JsonOpts));
+        // Restrict file permissions so other OS users can't read session cookies.
+        // On Windows this is best-effort; on Linux/macOS it sets mode 0600.
+        try
+        {
+            var info = new FileInfo(path);
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+        }
+        catch { /* best-effort */ }
     }
 
     public static void Clear(string profileStorageDir)

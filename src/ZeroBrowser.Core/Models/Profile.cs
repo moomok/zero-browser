@@ -27,6 +27,19 @@ public sealed class Profile
     /// </summary>
     public string? EnginePath { get; set; }
 
+    /// <summary>Fingerprint rotation interval in days. 0 = no rotation.</summary>
+    public int RotationIntervalDays { get; set; }
+
+    /// <summary>When the fingerprint seed was last rotated.</summary>
+    public DateTimeOffset? LastRotatedAt { get; set; }
+
+    /// <summary>
+    /// Portable encrypted fingerprint token in the format:
+    ///   base64_key|base64_encrypted_payload|base64_iv|flags_hex|version
+    /// Auto-generated when the seed changes. Can be imported to clone a profile's identity.
+    /// </summary>
+    public string? FingerprintToken { get; set; }
+
     public DateTimeOffset  CreatedAt { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? LastUsedAt { get; set; }
 }
@@ -50,6 +63,19 @@ public sealed class ProfileExtension
     public required string Path { get; set; }
     public bool   Enabled   { get; set; } = true;
     public int    SortOrder { get; set; }
+    public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>
+/// Records a previously used fingerprint seed for a profile, allowing
+/// the user to switch back to an earlier identity.
+/// </summary>
+public sealed class SeedHistoryEntry
+{
+    public required Guid Id { get; init; }
+    public required Guid ProfileId { get; init; }
+    public required string Seed { get; set; }
+    public string? Label { get; set; }
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
 }
 

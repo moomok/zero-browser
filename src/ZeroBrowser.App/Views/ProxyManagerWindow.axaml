@@ -22,13 +22,19 @@
                     <DataGridTextColumn Header="Host"   Binding="{Binding Host}"   Width="200"/>
                     <DataGridTextColumn Header="Port"   Binding="{Binding Port}"   Width="80"/>
                     <DataGridTextColumn Header="Auth"   Binding="{Binding Auth}"   Width="160"/>
-                    <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="120"/>
+                    <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90"/>
+                    <DataGridTextColumn Header="Test"   Binding="{Binding TestStatus}" Width="100"/>
                     <DataGridTemplateColumn Header="Actions" Width="*">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate x:DataType="vm:ProxyItemViewModel">
-                                <Button Content="Delete" Margin="6"
-                                        Command="{Binding $parent[Window].((vm:ProxyManagerViewModel)DataContext).DeleteCommand}"
-                                        CommandParameter="{Binding}" />
+                                <StackPanel Orientation="Horizontal" Spacing="4" Margin="6">
+                                    <Button Content="Test"
+                                            Command="{Binding $parent[Window].((vm:ProxyManagerViewModel)DataContext).TestProxyCommand}"
+                                            CommandParameter="{Binding}" />
+                                    <Button Content="Delete"
+                                            Command="{Binding $parent[Window].((vm:ProxyManagerViewModel)DataContext).DeleteCommand}"
+                                            CommandParameter="{Binding}" />
+                                </StackPanel>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
@@ -51,13 +57,14 @@
                  PlaceholderText="1.2.3.4:8080&#10;https://user:pass@proxy.example.com:443&#10;socks5://10.0.0.1:1080"
                  Text="{Binding BulkInput, Mode=TwoWay}"/>
 
-        <Grid Grid.Row="4" Margin="0,12,0,0" ColumnDefinitions="*,Auto,Auto,Auto">
+        <Grid Grid.Row="4" Margin="0,12,0,0" ColumnDefinitions="*,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Column="0"
                        Text="{Binding StatusMessage}"
                        VerticalAlignment="Center" FontSize="12" Opacity="0.7"/>
-            <Button Grid.Column="1" Content="Reload"  Command="{Binding ReloadCommand}" Margin="0,0,8,0"/>
-            <Button Grid.Column="2" Content="Import"  Command="{Binding ImportCommand}" Margin="0,0,8,0"/>
-            <Button Grid.Column="3" Content="Close"   Click="OnCloseClick"/>
+            <Button Grid.Column="1" Content="Test all"  Command="{Binding TestAllCommand}" Margin="0,0,8,0"/>
+            <Button Grid.Column="2" Content="Reload"  Command="{Binding ReloadCommand}" Margin="0,0,8,0"/>
+            <Button Grid.Column="3" Content="Import"  Command="{Binding ImportCommand}" Margin="0,0,8,0"/>
+            <Button Grid.Column="4" Content="Close"   Click="OnCloseClick"/>
         </Grid>
     </Grid>
 </Window>

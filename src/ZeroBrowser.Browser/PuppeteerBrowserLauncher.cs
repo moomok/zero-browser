@@ -52,6 +52,15 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
 
         if (request.Proxy is not null)
         {
+            // Sanitize proxy host/port to prevent argument injection via
+            // crafted values stored in the database.
+            var proxyHost = request.Proxy.Host
+                .Replace(" ", "").Replace("\"", "").Replace("'", "")
+                .Replace(";", "").Replace("&", "").Replace("|", "")
+                .Replace("`", "").Replace("$", "").Replace("\\", "")
+                .Replace("\n", "").Replace("\r", "");
+            if (string.IsNullOrWhiteSpace(proxyHost) || request.Proxy.Port <= 0 || request.Proxy.Port > 65535)
+                throw new ArgumentException("Invalid proxy host or port.");
             var scheme = request.Proxy.Type switch
             {
                 ProxyType.Http   => "http",
@@ -59,7 +68,22 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
                 ProxyType.Socks5 => "socks5",
                 _ => "http"
             };
-            args.Add($"--proxy-server={scheme}://{request.Proxy.Host}:{request.Proxy.Port}");
+
+            // For SOCKS5 with auth, credentials must go in the URL because
+            // page.AuthenticateAsync only handles HTTP 407 proxy-auth challenges.
+            // HTTP/HTTPS proxies use the 407 challenge flow via AuthenticateAsync.
+            if (request.Proxy.Type == ProxyType.Socks5
+                && request.Proxy.Username is not null
+                && request.Proxy.Password is not null)
+            {
+                var socksUser = Uri.EscapeDataString(request.Proxy.Username);
+                var socksPass = Uri.EscapeDataString(request.Proxy.Password);
+                args.Add($"--proxy-server=socks5://{socksUser}:{socksPass}@{proxyHost}:{request.Proxy.Port}");
+            }
+            else
+            {
+                args.Add($"--proxy-server={scheme}://{proxyHost}:{request.Proxy.Port}");
+            }
         }
 
         // Sideload extensions: only include enabled ones whose folders still
@@ -131,10 +155,29 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
         var page = (await browser.PagesAsync().ConfigureAwait(false)).FirstOrDefault()
                    ?? await browser.NewPageAsync().ConfigureAwait(false);
 
-        // Proxy authentication
-        if (request.Proxy is { Username: { } user, Password: { } pwd })
+        // Proxy authentication — HTTP/HTTPS proxies use 407 challenge.
+        // Must be applied on every new page, not just the initial one.
+        // SOCKS5 auth is already embedded in the --proxy-server URL above.
+        if (request.Proxy is { Username: { } user, Password: { } pwd }
+            && request.Proxy.Type != ProxyType.Socks5)
         {
             await page.AuthenticateAsync(new Credentials { Username = user, Password = pwd }).ConfigureAwait(false);
+
+            // Apply auth to any future tabs/pages the user opens.
+            browser.TargetCreated += async (_, e) =>
+            {
+                try
+                {
+                    var target = e.Target;
+                    if (target.Type == TargetType.Page)
+                    {
+                        var newPage = await target.PageAsync().ConfigureAwait(false);
+                        if (newPage is not null)
+                            await newPage.AuthenticateAsync(new Credentials { Username = user, Password = pwd }).ConfigureAwait(false);
+                    }
+                }
+                catch { /* best-effort: tab may close before auth completes */ }
+            };
         }
 
         // User agent + Sec-CH-UA

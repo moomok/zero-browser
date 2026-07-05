@@ -109,10 +109,11 @@ public sealed class ProxyRepository
     private ProxyEntry Map(ProxyRow row)
     {
         string? password = null;
+        bool decryptFailed = false;
         if (row.password_enc is { Length: > 0 })
         {
             try { password = System.Text.Encoding.UTF8.GetString(_box.Decrypt(row.password_enc)); }
-            catch { password = null; }
+            catch { password = null; decryptFailed = true; }
         }
         return new ProxyEntry
         {
@@ -125,7 +126,8 @@ public sealed class ProxyRepository
             Country = row.country,
             City = row.city,
             LastCheckAt = row.last_check_at is null ? null : DateTimeOffset.FromUnixTimeSeconds(row.last_check_at.Value),
-            Status = row.status,
+            // Surface decrypt failure in status so the user knows auth won't work.
+            Status = decryptFailed ? "auth-error" : row.status,
             IpLastSeen = row.ip_last_seen
         };
     }
