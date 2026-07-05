@@ -41,6 +41,11 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
     public ObservableCollection<RotationOption> RotationOptions { get; } = new();
     [ObservableProperty] private RotationOption? _selectedRotation;
 
+    // TLS / JA3 fingerprint diversion.
+    public ObservableCollection<TlsOption> TlsOptions { get; } = new();
+    [ObservableProperty] private TlsOption? _selectedTls;
+    [ObservableProperty] private string _tlsStatusMessage = string.Empty;
+
     // Seed history — previous seeds the user can switch back to.
     public ObservableCollection<SeedHistoryItemViewModel> SeedHistory { get; } = new();
     [ObservableProperty] private string _seedHistoryStatusMessage = string.Empty;
@@ -132,6 +137,16 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
         SelectedRotation = RotationOptions.FirstOrDefault(r => r.Days == _profile.RotationIntervalDays)
                            ?? RotationOptions[0];
 
+        // TLS / JA3 fingerprint options.
+        TlsOptions.Add(new TlsOption("none",      "Off (use Chromium's default TLS stack)"));
+        TlsOptions.Add(new TlsOption("chrome",    "Chrome — TLS ClientHello like Chrome 150"));
+        TlsOptions.Add(new TlsOption("firefox",   "Firefox — TLS ClientHello like Firefox 130"));
+        TlsOptions.Add(new TlsOption("safari",    "Safari — TLS ClientHello like Safari 18"));
+        TlsOptions.Add(new TlsOption("edge",      "Edge — TLS ClientHello like Edge 150"));
+        TlsOptions.Add(new TlsOption("randomized","Randomized — deterministic pick per profile"));
+        var currentTls = (_profile.TlsDiversionMode ?? "none").ToLowerInvariant();
+        SelectedTls = TlsOptions.FirstOrDefault(t => t.Mode == currentTls) ?? TlsOptions[0];
+
         UpdatePreview();
         RefreshToken();
     }
@@ -209,6 +224,67 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
         SeedHistory.Remove(item);
         SeedHistoryStatusMessage = "Removed seed from history.";
     }
+
+    [RelayCommand]
+    private async Task TestTlsAsync()
+    {
+        TlsStatusMessage = "Generating TLS report…";
+        try
+        {
+            var mode = SelectedTls?.Mode ?? "none";
+            if (mode == "none")
+            {
+                TlsStatusMessage = "Select a non-off mode first.";
+                return;
+            }
+
+            // Generate a temporary sidecar + check that the cipher suite set is non-empty.
+            await using var proxy = await ZeroBrowser.Browser.Tls.TlsSidecarProxy.CreateAsync(
+                FingerprintSeed ?? Guid.NewGuid().ToString("N"),
+                mode);
+            TlsStatusMessage = $"Sidecar ready on 127.0.0.1:{proxy.Port}. Cipher suites: {_countCipherSuites(mode)}. Launch a browser to test via tls.peet.ws.";
+        }
+        catch (Exception ex)
+        {
+            TlsStatusMessage = $"TLS sidecar failed: {ex.Message}";
+        }
+    }
+
+    private static int _countCipherSuites(string mode) =>
+        ZeroBrowser.Browser.Tls.TlsFingerprintPool.GetCipherSuites($"seed:{mode}", mode).Length;
+
+    [RelayCommand]
+    private async Task InstallCaAsync()
+    {
+        try
+        {
+            if (!ZeroBrowser.Browser.Tls.TlsCertificateAuthority.Exists)
+                ZeroBrowser.Browser.Tls.TlsCertificateAuthority.Generate();
+            var ok = await ZeroBrowser.Browser.Tls.TlsCertificateAuthority.InstallToTrustStoreAsync();
+            TlsStatusMessage = ok
+                ? "Root CA installed. Restart browser profiles to pick up trusted certs."
+                : "Install failed — try running the app as administrator, or see OS docs.";
+        }
+        catch (Exception ex)
+        {
+            TlsStatusMessage = $"CA install error: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task RevokeCaAsync()
+    {
+        try
+        {
+            var ok = await ZeroBrowser.Browser.Tls.TlsCertificateAuthority.RevokeFromTrustStoreAsync();
+            TlsStatusMessage = ok ? "Root CA revoked." : "Revoke failed; remove manually from OS trust store.";
+        }
+        catch (Exception ex)
+        {
+            TlsStatusMessage = $"CA revoke error: {ex.Message}";
+        }
+    }
+}
 
     private void RefreshToken()
     {
@@ -310,6 +386,7 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
         _profile.ProxyId = SelectedProxy?.Id;
         _profile.EnginePath = SelectedEngine?.Path;
         _profile.RotationIntervalDays = SelectedRotation?.Days ?? 0;
+        _profile.TlsDiversionMode = SelectedTls?.Mode ?? "none";
         // Set LastRotatedAt on first save if rotation is enabled and not already set.
         if (_profile.RotationIntervalDays > 0 && _profile.LastRotatedAt is null)
             _profile.LastRotatedAt = DateTimeOffset.UtcNow;

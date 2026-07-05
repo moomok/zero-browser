@@ -24,6 +24,7 @@ Inspirasi: Multilogin / GoLogin / AdsPower / Dolphin Anty / Kameleo — versi op
 - ✅ **68 unit tests passing** (Win/Mac/Linux)
 
 ### Identity & Security
+- ✅ **TLS / JA3 fingerprint diversion** — in-process sidecar proxy per profile, derives TLS ClientHello (cipher suite order) from seed-based pool (Chrome/Firefox/Safari/Edge/Randomized). User-Agent and TLS mode are auto-normalized for consistency.
 - ✅ **Master password lock di app start** (Argon2id-derived SecretBox; sensitive data di disk dienkripsi)
 - ✅ **Encrypted fingerprint token** — format portable `base64_key|base64_payload|base64_iv|flags|ver` (AES-256-GCM)
 - ✅ **Proxy manager + bulk import** + **connectivity test** (Test / Test All via httpbin.org/ip)
@@ -49,9 +50,9 @@ Inspirasi: Multilogin / GoLogin / AdsPower / Dolphin Anty / Kameleo — versi op
 - ✅ **Sec-CH-UA grease brand** fix per milestone range (126-130, 131-134, 135-144, 145+)
 
 ### Belum (roadmap)
-- [ ] JA3/TLS fingerprint diversion (butuh curl-impersonate binaries; kolom `tls_diversion_mode` sudah ready di DB untuk toggle Chrome/Firefox/Safari/Edge)
 - [ ] Automation runner UI (Runner + Node.js CDP attach sudah dibuild; tinggal bind UI file picker)
 - [ ] Code signing + auto-update
+- [ ] TLS cert-pinning bypass list per domain
 
 ---
 

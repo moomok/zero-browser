@@ -40,6 +40,27 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
             await fetcher.DownloadAsync().ConfigureAwait(false);
         }
 
+        // TLS fingerprint diversion via sidecar proxy.
+        Tls.TlsSidecarProxy? sidecar = null;
+        var tlsMode = request.Profile.TlsDiversionMode ?? "none";
+        if (!string.IsNullOrWhiteSpace(tlsMode) && tlsMode != "none")
+        {
+            try
+            {
+                // Normalize mode to match User-Agent for consistency.
+                tlsMode = Tls.TlsFingerprintPool.NormalizeToUserAgent(tlsMode, request.Fingerprint.UserAgent);
+                sidecar = await Tls.TlsSidecarProxy.CreateAsync(
+                    request.Profile.FingerprintSeed, tlsMode, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // Fallback: if sidecar fails to start, run without TLS diversion.
+                System.Diagnostics.Debug.WriteLine($"TLS sidecar start failed: {ex.Message}");
+                sidecar = null;
+                tlsMode = "none";
+            }
+        }
+
         var args = new List<string>
         {
             "--no-first-run",
@@ -50,7 +71,21 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
             $"--accept-lang={request.Fingerprint.AcceptLanguage}"
         };
 
-        if (request.Proxy is not null)
+        // Disable QUIC when TLS diversion is active — QUIC can't be MITMed.
+        if (sidecar is not null)
+        {
+            args.Add("--disable-quic");
+            args.Add("--disable-features=UseChromeOSDirectVideoDecoder,PreconnectToSearch,NetworkServiceInProcess");
+        }
+
+        if (sidecar is not null)
+        {
+            // Route all browser traffic through our TLS-diversion sidecar.
+            // Inside the sidecar, the TLS leg uses the spoofed cipher suites.
+            args.Add($"--proxy-server=http://127.0.0.1:{sidecar.Port}");
+            // Also no_PROXY for any management endpoints (none currently).
+        }
+        else if (request.Proxy is not null)
         {
             // Sanitize proxy host/port to prevent argument injection via
             // crafted values stored in the database.
@@ -210,7 +245,7 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
             await page.GoToAsync(request.StartUrl).ConfigureAwait(false);
         }
 
-        return new PuppeteerBrowserSession(request.Profile, browser);
+        return new PuppeteerBrowserSession(request.Profile, browser, sidecar);
     }
 
     private static CookieParam ToCookieParam(CookieRecord c) => new()
@@ -235,12 +270,14 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
 internal sealed class PuppeteerBrowserSession : IBrowserSession
 {
     private readonly IBrowser _browser;
+    private readonly Tls.TlsSidecarProxy? _sidecar;
     public Profile Profile { get; }
 
-    public PuppeteerBrowserSession(Profile profile, IBrowser browser)
+    public PuppeteerBrowserSession(Profile profile, IBrowser browser, Tls.TlsSidecarProxy? sidecar = null)
     {
         Profile = profile;
         _browser = browser;
+        _sidecar = sidecar;
     }
 
     public bool IsRunning => !_browser.IsClosed;
@@ -254,5 +291,10 @@ internal sealed class PuppeteerBrowserSession : IBrowserSession
     {
         await CloseAsync().ConfigureAwait(false);
         _browser.Dispose();
+        if (_sidecar is not null)
+        {
+            try { await _sidecar.DisposeAsync(); }
+            catch { /* best-effort */ }
+        }
     }
 }
