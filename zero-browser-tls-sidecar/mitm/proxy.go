@@ -122,8 +122,7 @@ func (c *CA) signLeaf(host string) (*tls.Certificate, error) {
 		ExtKeyUsage: []x509.ExtKeyUsage{
 			x509.ExtKeyUsageServerAuth,
 		},
-		DNSNames:    []string{host},
-		IPAddresses: []net.IP{net.ParseIP(host)},
+		DNSNames: []string{host},
 	}
 
 	if ip := net.ParseIP(host); ip != nil {
@@ -211,12 +210,13 @@ func (h *Handler) HandleConnect(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tlsConn.Close()
 
-	// Dial target with uTLS.
+	// Dial target with uTLS. Pass host (with port) for the dial and
+	// targetHost (hostname only) for SNI.
 	var targetConn net.Conn
 	if h.UpstreamProxy != nil {
-		targetConn, err = dialViaUpstreamProxy(h.UpstreamProxy, targetHost, h.Template)
+		targetConn, err = dialViaUpstreamProxy(h.UpstreamProxy, host, h.Template)
 	} else {
-		targetConn, err = dialUTLS("tcp", targetHost, h.Template)
+		targetConn, err = dialUTLS("tcp", host, h.Template)
 	}
 	if err != nil {
 		if h.Verbose {

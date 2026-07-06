@@ -19,6 +19,13 @@ type Template struct {
 // mode="randomized" picks one of all presets using the seed.
 // Any other mode falls back to Chrome.
 //
+// IMPORTANT: Chrome 106+ presets in uTLS use ShuffleChromeTLSExtensions which
+// randomizes extension order per-connection. That means the resulting JA3 hash
+// changes every connection even for the same profile — bad for fingerprint
+// stability. We therefore use Chrome_102 for "chrome" mode (last preset with
+// deterministic extension order). Chrome 106+ is still available in the
+// randomized pool.
+//
 // The selection algorithm MUST be identical to the C# TlsFingerprintPool
 // selector when both code paths are active for the same profile (e.g. the
 // C# Test button + this sidecar must agree on what template will be used).
@@ -26,7 +33,7 @@ type Template struct {
 func Select(seed, mode string) (Template, error) {
 	switch strings.ToLower(mode) {
 	case "chrome":
-		return Template{ID: "Chrome_106_Shuffle", ClientHello: utls.HelloChrome_106_Shuffle}, nil
+		return Template{ID: "Chrome_102", ClientHello: utls.HelloChrome_102}, nil
 	case "firefox":
 		return Template{ID: "Firefox_105", ClientHello: utls.HelloFirefox_105}, nil
 	case "safari":
@@ -35,9 +42,9 @@ func Select(seed, mode string) (Template, error) {
 		return Template{ID: "Edge_106", ClientHello: utls.HelloEdge_106}, nil
 	case "randomized":
 		all := []Template{
-			{ID: "Chrome_106_Shuffle", ClientHello: utls.HelloChrome_106_Shuffle},
-			{ID: "Chrome_100", ClientHello: utls.HelloChrome_100},
 			{ID: "Chrome_102", ClientHello: utls.HelloChrome_102},
+			{ID: "Chrome_100", ClientHello: utls.HelloChrome_100},
+			{ID: "Chrome_106_Shuffle", ClientHello: utls.HelloChrome_106_Shuffle},
 			{ID: "Firefox_105", ClientHello: utls.HelloFirefox_105},
 			{ID: "Firefox_102", ClientHello: utls.HelloFirefox_102},
 			{ID: "Firefox_99", ClientHello: utls.HelloFirefox_99},
@@ -50,7 +57,7 @@ func Select(seed, mode string) (Template, error) {
 		return all[idx], nil
 	default:
 		// Unknown mode: fall back to Chrome (matches C# fallback behavior).
-		return Template{ID: "Chrome_106_Shuffle", ClientHello: utls.HelloChrome_106_Shuffle}, nil
+		return Template{ID: "Chrome_102", ClientHello: utls.HelloChrome_102}, nil
 	}
 }
 

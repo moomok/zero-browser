@@ -1,23 +1,29 @@
 // Tiny utility: connect to a host via the same uTLS preset the sidecar uses
-// and print the JA3 hash of the ClientHello. This lets us verify empirically
-// which JA3 our templates produce without needing to wire up Chromium.
+// and print the JA3 hash + raw string of the ClientHello that was actually
+// sent over the wire.
 //
-// Usage: go run ./compute-ja3 --mode chrome --host tls.peet.ws:443
+// Parses the raw ClientHello using the same cryptobyte helpers as
+// crypto/tls's own ClientHello parser — this is what Go's TLS stack itself
+// uses, so the result is byte-identical to what the server sees.
+
 package main
 
 import (
-	"crypto/sha256"
+	"crypto/md5"
 	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 
 	utls "github.com/refraction-networking/utls"
 
 	fp "github.com/moomok/zero-browser-tls-sidecar/fingerprint"
+
+	"golang.org/x/crypto/cryptobyte"
 )
 
 func main() {
@@ -38,124 +44,178 @@ func main() {
 	}
 	defer rawConn.Close()
 
-	tlsCfg := &utls.Config{ServerName: strings.Split(*host, ":")[0], InsecureSkipVerify: true}
+	serverName := strings.Split(*host, ":")[0]
+	tlsCfg := &utls.Config{ServerName: serverName, InsecureSkipVerify: true}
 	uconn := utls.UClient(rawConn, tlsCfg, tpl.ClientHello)
 	if err := uconn.Handshake(); err != nil {
 		log.Fatalf("handshake: %v", err)
 	}
 
-	// uTLS exposes the marshalled ClientHello via UConn.HandshakeState.Hello.
 	hello := uconn.HandshakeState.Hello
 	if hello == nil {
-		log.Fatal("no ClientHello available in handshake state")
-	}
-	raw := hello.Raw
-	fmt.Fprintf(os.Stderr, "raw len: %d\n", len(raw))
-	if len(raw) == 0 {
-		// Some older presets don't populate Raw. Try re-marshaling.
-		var err error
-		raw, err = hello.Marshal()
-		if err != nil {
-			log.Fatalf("marshal: %v", err)
-		}
-		fmt.Fprintf(os.Stderr, "marshal len: %d\n", len(raw))
-	}
-	if len(raw) == 0 {
-		log.Fatal("no raw ClientHello bytes")
+		log.Fatal("no Hello in HandshakeState")
 	}
 
-	// Compute JA3 manually (the de facto format).
-	ja3 := computeJA3(raw)
-	fmt.Println("JA3 =", ja3)
+	// Parse the marshaled ClientHello using cryptobyte (same parser as
+	// crypto/tls itself).
+	parsed, extOrder, err := parseClientHelloForJA3(hello.Raw)
+	if err != nil {
+		log.Fatalf("parse: %v", err)
+	}
+
+	ja3Raw := computeJA3Raw(parsed.vers, parsed.ciphers, extOrder, parsed.curves, parsed.points)
+	sum := md5.Sum([]byte(ja3Raw))
+	ja3Hash := hex.EncodeToString(sum[:])
+
+	fmt.Println("JA3_RAW  =", ja3Raw)
+	fmt.Println("JA3_HASH =", ja3Hash)
+
+	fmt.Println("---")
+	fmt.Println("TLSVersion     =", int(parsed.vers))
+	fmt.Println("CipherSuites   =", joinUint16StripGREASE(parsed.ciphers))
+	fmt.Println("Extensions     =", joinUint16StripGREASE(extOrder))
+	fmt.Println("EllipticCurves =", joinUint16StripGREASE(parsed.curves))
+	fmt.Println("ECPointFormats =", joinUint8(parsed.points))
 }
 
-func computeJA3(raw []byte) string {
-	// Parse TLS record header: type(1) + version(2) + length(2) + handshake(4) + version(2) + random(32)
-	if len(raw) < 5+4+2+32 {
-		return ""
+type parsedHello struct {
+	vers    uint16
+	ciphers []uint16
+	curves  []uint16
+	points  []uint8
+}
+
+// parseClientHelloForJA3 parses the TLS handshake ClientHello message body
+// (starts with type(1) + length(3)) and returns JA3-relevant fields plus
+// extension IDs in transmission order.
+func parseClientHelloForJA3(raw []byte) (*parsedHello, []uint16, error) {
+	out := &parsedHello{}
+	s := cryptobyte.String(raw)
+
+	var hsType uint8
+	var hsLen uint32
+	if !s.ReadUint8(&hsType) || !s.ReadUint24(&hsLen) || hsType != 0x01 {
+		return nil, nil, fmt.Errorf("not a ClientHello (hsType=%d)", hsType)
 	}
-	off := 5 + 4 + 2 + 32
-	// session_id
-	if off >= len(raw) {
-		return ""
+	hsBody := cryptobyte.String(raw[4 : 4+int(hsLen)])
+	body := hsBody
+
+	var vers uint16
+	if !body.ReadUint16(&vers) {
+		return nil, nil, fmt.Errorf("read version")
 	}
-	sidLen := int(raw[off])
-	off += 1 + sidLen
-	// cipher_suites
-	if off+2 > len(raw) {
-		return ""
+	out.vers = vers
+
+	var random []byte
+	if !body.ReadBytes(&random, 32) {
+		return nil, nil, fmt.Errorf("read random")
 	}
-	csLen := int(uint16(raw[off])<<8 | uint16(raw[off+1]))
-	off += 2
-	if off+csLen > len(raw) {
-		return ""
+
+	var sid cryptobyte.String
+	if !body.ReadUint8LengthPrefixed(&sid) {
+		return nil, nil, fmt.Errorf("read session id")
 	}
-	var ciphers []string
-	for i := 0; i+2 <= csLen; i += 2 {
-		c := uint16(raw[off+i])<<8 | uint16(raw[off+i+1])
-		if c != 0x0a0a { // strip GREASE
-			ciphers = append(ciphers, fmt.Sprintf("%d", c))
+
+	var cs cryptobyte.String
+	if !body.ReadUint16LengthPrefixed(&cs) {
+		return nil, nil, fmt.Errorf("read cipher suites")
+	}
+	for !cs.Empty() {
+		var c uint16
+		if !cs.ReadUint16(&c) {
+			return nil, nil, fmt.Errorf("read cipher")
 		}
+		out.ciphers = append(out.ciphers, c)
 	}
-	off += csLen
-	// compression_methods
-	if off >= len(raw) {
-		return ""
+
+	var comp cryptobyte.String
+	if !body.ReadUint8LengthPrefixed(&comp) {
+		return nil, nil, fmt.Errorf("read compression")
 	}
-	compLen := int(raw[off])
-	off += 1
-	if off+compLen > len(raw) {
-		return ""
+
+	var exts cryptobyte.String
+	if body.Empty() {
+		return out, nil, nil
 	}
-	off += compLen
-	// extensions
-	if off+2 > len(raw) {
-		return ""
+	if !body.ReadUint16LengthPrefixed(&exts) {
+		return nil, nil, fmt.Errorf("read extensions")
 	}
-	extLen := int(uint16(raw[off])<<8 | uint16(raw[off+1]))
-	off += 2
-	end := off + extLen
-	if end > len(raw) {
-		end = len(raw)
-	}
-	var extIDs []string
-	var curves []string
-	var pointFmts []string
-	for off+4 <= end {
-		eid := uint16(raw[off])<<8 | uint16(raw[off+1])
-		elen := int(uint16(raw[off+2])<<8 | uint16(raw[off+3]))
-		off += 4
-		if off+elen > end {
-			break
+
+	var extOrder []uint16
+	for !exts.Empty() {
+		var eid uint16
+		var edata cryptobyte.String
+		if !exts.ReadUint16(&eid) || !exts.ReadUint16LengthPrefixed(&edata) {
+			return nil, nil, fmt.Errorf("read extension")
 		}
-		if eid != 0x0a0a {
-			extIDs = append(extIDs, fmt.Sprintf("%d", eid))
-		}
+		extOrder = append(extOrder, eid)
 		switch eid {
-		case 0x000a: // supported_groups
-			if elen >= 2 {
-				l := int(uint16(raw[off])<<8 | uint16(raw[off+1]))
-				for i := 0; i+2 <= l && off+2+i+2 <= end; i += 2 {
-					g := uint16(raw[off+2+i])<<8 | uint16(raw[off+2+i+1])
-					if g != 0x0a0a {
-						curves = append(curves, fmt.Sprintf("%d", g))
-					}
+		case 0x000a: // supported_groups / elliptic_curves
+			var groups cryptobyte.String
+			if !edata.ReadUint16LengthPrefixed(&groups) {
+				return nil, nil, fmt.Errorf("read groups")
+			}
+			for !groups.Empty() {
+				var g uint16
+				if !groups.ReadUint16(&g) {
+					return nil, nil, fmt.Errorf("read curve")
 				}
+				out.curves = append(out.curves, g)
 			}
 		case 0x000b: // ec_point_formats
-			if elen >= 1 {
-				l := int(raw[off])
-				for i := 0; i < l && off+1+i < end; i++ {
-					pointFmts = append(pointFmts, fmt.Sprintf("%d", raw[off+1+i]))
+			var pf cryptobyte.String
+			if !edata.ReadUint8LengthPrefixed(&pf) {
+				return nil, nil, fmt.Errorf("read point formats")
+			}
+			for !pf.Empty() {
+				var p uint8
+				if !pf.ReadUint8(&p) {
+					return nil, nil, fmt.Errorf("read point fmt")
 				}
+				out.points = append(out.points, p)
 			}
 		}
-		off += elen
 	}
-	h := sha256.New()
-	h.Write([]byte(strings.Join(ciphers, "-") + "," +
-		strings.Join(extIDs, "-") + "," +
-		strings.Join(curves, "-") + "," +
-		strings.Join(pointFmts, "-")))
-	return hex.EncodeToString(h.Sum(nil))
+
+	return out, extOrder, nil
+}
+
+func computeJA3Raw(vers uint16, ciphers, exts, curves []uint16, points []uint8) string {
+	return strings.Join([]string{
+		strconv.Itoa(int(stripGREASE(vers))),
+		joinUint16StripGREASE(ciphers),
+		joinUint16StripGREASE(exts),
+		joinUint16StripGREASE(curves),
+		joinUint8(points),
+	}, ",")
+}
+
+func joinUint16StripGREASE(vs []uint16) string {
+	out := make([]string, 0, len(vs))
+	for _, v := range vs {
+		if isGREASE(v) {
+			continue
+		}
+		out = append(out, strconv.Itoa(int(v)))
+	}
+	return strings.Join(out, "-")
+}
+
+func joinUint8(vs []uint8) string {
+	out := make([]string, 0, len(vs))
+	for _, v := range vs {
+		out = append(out, strconv.Itoa(int(v)))
+	}
+	return strings.Join(out, "-")
+}
+
+func stripGREASE(v uint16) uint16 {
+	if isGREASE(v) {
+		return 0
+	}
+	return v
+}
+
+func isGREASE(v uint16) bool {
+	return (v>>8) == (v&0xff) && v&0xf == 0xa
 }
