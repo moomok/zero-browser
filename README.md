@@ -24,6 +24,7 @@ Inspirasi: Multilogin / GoLogin / AdsPower / Dolphin Anty / Kameleo — versi op
 - ✅ **68 unit tests passing** (Win/Mac/Linux)
 
 ### Identity & Security
+- 🟡 **TLS / JA3 fingerprint diversion via Go+uTLS sidecar — v0.4 alpha.** Replaces the in-process `CipherSuitesPolicy` (retired, see `148e8b2`) with an external `zero-browser-tls-sidecar` Go binary that uses `github.com/refraction-networking/utls` to construct the ClientHello byte-for-byte. Same code path on Windows / macOS / Linux. Verified empirically on Windows + Chrome 106 (see verification report below); other templates + platforms need user validation before this can be marked ✅.
 - ✅ **Master password lock di app start** (Argon2id-derived SecretBox; sensitive data di disk dienkripsi)
 - ✅ **Encrypted fingerprint token** — format portable `base64_key|base64_payload|base64_iv|flags|ver` (AES-256-GCM)
 - ✅ **Proxy manager + bulk import** + **connectivity test** (Test / Test All via httpbin.org/ip)
@@ -49,9 +50,9 @@ Inspirasi: Multilogin / GoLogin / AdsPower / Dolphin Anty / Kameleo — versi op
 - ✅ **Sec-CH-UA grease brand** fix per milestone range (126-130, 131-134, 135-144, 145+)
 
 ### Belum (roadmap)
-- [ ] JA3/TLS fingerprint diversion (butuh curl-impersonate binaries; kolom `tls_diversion_mode` sudah ready di DB untuk toggle Chrome/Firefox/Safari/Edge)
 - [ ] Automation runner UI (Runner + Node.js CDP attach sudah dibuild; tinggal bind UI file picker)
 - [ ] Code signing + auto-update
+- [ ] TLS cert-pinning bypass list per domain
 
 ---
 
@@ -322,13 +323,49 @@ Pastikan tidak ada warning "Suspicious", IP/browser/system info konsisten.
 
 ## Catatan Realistis (Penting!)
 
-1. **JA3/TLS fingerprint**: Chromium standar punya TLS handshake yang sama untuk semua profil di mesin yang sama. Untuk diversifikasi, butuh patch source Chromium atau tunnel via `curl-impersonate` / `mitmproxy` dengan TLS fingerprint custom. **Roadmap**, bukan MVP.
+1. **JA3/TLS fingerprint**: **disabled in v0.3** (lihat Status). `CipherSuitesPolicy` tidak cukup — perlu Go+uTLS sidecar untuk kontrol penuh atas ClientHello. Track di roadmap v0.4.
 
 2. **Anti-bot enterprise**: jangan ekspektasi 100% lolos Cloudflare Bot Management / Datadome / PerimeterX / Akamai. Vendor anti-detect komersial pun kucing-tikusan. Target realistis: lolos creepjs / iphey / pixelscan / browserleaks.
 
 3. **Maintenance dataset**: teknik anti-detect rentan break setiap Chrome major (~6 minggu sekali). Update `FingerprintDataset.cs` setiap update Chrome. Sekarang adapter support Chrome 126-150; kalau sudah lewat 150 mungkin perlu aggiornare.
 
 4. **Legal**: tool legal untuk privasi & multi-account TOS-compliant. **Tidak** legal untuk fraud, fake review, ad-fraud, ban evasion, dll. Periksa TOS platform target sebelum pakai.
+
+---
+
+### 1. Build
+```pwsh
+dotnet build ZeroBrowser.sln -c Release
+```
+
+### 2. Publish desktop (Windows x64)
+```pwsh
+dotnet publish ZeroBrowser.Desktop -c Release -r win-x64 --self-contained true `
+  /p:PublishSingleFile=true /p:DebugType=embedded
+```
+Output: `ZeroBrowser.Desktop/bin/Release/net8.0/win-x64/publish/ZeroBrowser.Desktop.exe`
+
+### 3. Install Chromium
+Karena redistribusi Chromium binary bukan di-bundle (lisensi), download manual via script:
+```pwsh
+.\scripts\install-chromium.ps1
+# atau pakai versi spesifik:
+.\scripts\install-chromium.ps1 -Version 138.0.7204.157
+```
+Hasil: `vendor/chromium/chrome-win/chrome.exe` (auto-detected oleh `BrowserDetector`). Bisa juga pakai Chrome / Brave / Edge sistem — lihat "Browser Detector" di Settings.
+
+### 4. Run
+```pwsh
+.\ZeroBrowser.Desktop\bin\Release\net8.0\win-x64\publish\ZeroBrowser.Desktop.exe
+```
+Pertama kali: set master password → otomatis derived ke SecretBox untuk encrypt proxy password & secret lain di DB.
+
+### Linux / macOS
+```pwsh
+dotnet publish ZeroBrowser.Desktop -c Release -r linux-x64 --self-contained true /p:PublishSingleFile=true
+dotnet publish ZeroBrowser.Desktop -c Release -r osx-arm64 --self-contained true /p:PublishSingleFile=true
+```
+Chromium auto-detect lewat `BrowserDetector` (Chrome/Brave/Edge di macOS, chromium / google-chrome di Linux).
 
 ---
 

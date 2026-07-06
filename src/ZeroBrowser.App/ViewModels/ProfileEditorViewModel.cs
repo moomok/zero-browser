@@ -41,6 +41,13 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
     public ObservableCollection<RotationOption> RotationOptions { get; } = new();
     [ObservableProperty] private RotationOption? _selectedRotation;
 
+    // TLS / JA3 fingerprint diversion.
+    public ObservableCollection<TlsOption> TlsOptions { get; } = new();
+    [ObservableProperty] private TlsOption? _selectedTls;
+    [ObservableProperty] private string _tlsStatusMessage = string.Empty;
+
+    [ObservableProperty] private string _tlsLimitationMessage = string.Empty;
+
     // Seed history — previous seeds the user can switch back to.
     public ObservableCollection<SeedHistoryItemViewModel> SeedHistory { get; } = new();
     [ObservableProperty] private string _seedHistoryStatusMessage = string.Empty;
@@ -132,6 +139,26 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
         SelectedRotation = RotationOptions.FirstOrDefault(r => r.Days == _profile.RotationIntervalDays)
                            ?? RotationOptions[0];
 
+        // TLS / JA3 fingerprint options.
+        TlsOptions.Add(new TlsOption("none",      "Off (use Chromium's default TLS stack)"));
+        TlsOptions.Add(new TlsOption("chrome",    "Chrome — TLS like Chrome 102 (UA locked to 102.x, May 2022)"));
+        TlsOptions.Add(new TlsOption("firefox",   "Firefox — TLS like Firefox 105 (UA locked to 105.0)"));
+        TlsOptions.Add(new TlsOption("safari",    "Safari — TLS like Safari 16.0 (UA locked to 16.0)"));
+        TlsOptions.Add(new TlsOption("edge",      "Edge — TLS like Edge 106 (UA locked to 106.x)"));
+        TlsOptions.Add(new TlsOption("randomized","Randomized — deterministic pick per profile (UA version matches)"));
+        var currentTls = (_profile.TlsDiversionMode ?? "none").ToLowerInvariant();
+        SelectedTls = TlsOptions.FirstOrDefault(t => t.Mode == currentTls) ?? TlsOptions[0];
+
+        TlsLimitationMessage = ZeroBrowser.Browser.Tls.TlsSupport.LimitationReason;
+
+        // Surface the version-pinning implication so the user understands that
+        // changing the TLS template will force the UA / Sec-CH-UA version.
+        var pinnedVersion = ZeroBrowser.Core.Fingerprint.FingerprintDataset.VersionForTlsMode(SelectedTls?.Mode);
+        if (pinnedVersion is not null)
+        {
+            TlsLimitationMessage += $" | UA/Sec-CH-UA version will be locked to {pinnedVersion} for consistency with the {SelectedTls!.Mode} TLS fingerprint.";
+        }
+
         UpdatePreview();
         RefreshToken();
     }
@@ -149,7 +176,7 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
         }
         try
         {
-            var fp = _generator.Generate(FingerprintSeed, SelectedOs?.Os);
+            var fp = _generator.Generate(FingerprintSeed, SelectedOs?.Os, SelectedTls?.Mode);
             PreviewUserAgent = fp.UserAgent;
             // TimezoneOffsetMinutes follows JS getTimezoneOffset() — positive = west of UTC, so display sign is inverted.
             PreviewTimezone  = $"{fp.Timezone} (UTC{(fp.TimezoneOffsetMinutes <= 0 ? "+" : "-")}{Math.Abs(fp.TimezoneOffsetMinutes) / 60:00}:{Math.Abs(fp.TimezoneOffsetMinutes) % 60:00})";
@@ -208,6 +235,86 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
         if (item is null) return;
         SeedHistory.Remove(item);
         SeedHistoryStatusMessage = "Removed seed from history.";
+    }
+
+    [RelayCommand]
+    private async Task TestTlsAsync()
+    {
+        TlsStatusMessage = "Starting TLS sidecar…";
+        try
+        {
+            var mode = SelectedTls?.Mode ?? "none";
+            if (mode == "none")
+            {
+                TlsStatusMessage = "Select a non-off mode first.";
+                return;
+            }
+
+            if (!ZeroBrowser.Browser.Tls.TlsSupport.IsAvailable)
+            {
+                TlsStatusMessage = $"TLS sidecar binary not found for {ZeroBrowser.Browser.Tls.TlsSupport.Platform}. " +
+                                   "Build it with zero-browser-tls-sidecar/build.ps1.";
+                return;
+            }
+
+            // Ensure Root CA exists before launching sidecar.
+            if (!ZeroBrowser.Browser.Tls.TlsCertificateAuthority.Exists)
+                ZeroBrowser.Browser.Tls.TlsCertificateAuthority.Generate();
+
+            var sidecarPath = ZeroBrowser.Browser.Tls.TlsSupport.ResolveSidecarPath()!;
+            var port = 39000 + Random.Shared.Next(0, 2000);
+            await using var proc = await ZeroBrowser.Browser.Tls.SidecarProcess.StartAsync(
+                sidecarPath: sidecarPath,
+                port: port,
+                profileId: _profile.Id.ToString("N"),
+                fingerprintMode: mode,
+                seed: FingerprintSeed ?? Guid.NewGuid().ToString("N"),
+                caCertPath: ZeroBrowser.Browser.Tls.TlsCertificateAuthority.CertPath,
+                caKeyPath: ZeroBrowser.Browser.Tls.TlsCertificateAuthority.KeyPemPath,
+                upstreamProxy: null,
+                readyTimeout: TimeSpan.FromSeconds(5));
+            TlsStatusMessage = $"Sidecar ready on 127.0.0.1:{proc.Port}. Template: {proc.TemplateId}. Launch a browser to test via tls.peet.ws.";
+        }
+        catch (Exception ex)
+        {
+            TlsStatusMessage = $"TLS sidecar failed: {ex.Message}";
+        }
+    }
+
+    private static int _countCipherSuites(string mode) =>
+        ZeroBrowser.Browser.Tls.TlsFingerprintPool.GetCipherSuites($"seed:{mode}", mode).Length;
+    // kept for any legacy callers; harmless.
+
+    [RelayCommand]
+    private async Task InstallCaAsync()
+    {
+        try
+        {
+            if (!ZeroBrowser.Browser.Tls.TlsCertificateAuthority.Exists)
+                ZeroBrowser.Browser.Tls.TlsCertificateAuthority.Generate();
+            var ok = await ZeroBrowser.Browser.Tls.TlsCertificateAuthority.InstallToTrustStoreAsync();
+            TlsStatusMessage = ok
+                ? "Root CA installed. Restart browser profiles to pick up trusted certs."
+                : "Install failed — try running the app as administrator, or see OS docs.";
+        }
+        catch (Exception ex)
+        {
+            TlsStatusMessage = $"CA install error: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task RevokeCaAsync()
+    {
+        try
+        {
+            var ok = await ZeroBrowser.Browser.Tls.TlsCertificateAuthority.RevokeFromTrustStoreAsync();
+            TlsStatusMessage = ok ? "Root CA revoked." : "Revoke failed; remove manually from OS trust store.";
+        }
+        catch (Exception ex)
+        {
+            TlsStatusMessage = $"CA revoke error: {ex.Message}";
+        }
     }
 
     private void RefreshToken()
@@ -310,6 +417,7 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
         _profile.ProxyId = SelectedProxy?.Id;
         _profile.EnginePath = SelectedEngine?.Path;
         _profile.RotationIntervalDays = SelectedRotation?.Days ?? 0;
+        _profile.TlsDiversionMode = SelectedTls?.Mode ?? "none";
         // Set LastRotatedAt on first save if rotation is enabled and not already set.
         if (_profile.RotationIntervalDays > 0 && _profile.LastRotatedAt is null)
             _profile.LastRotatedAt = DateTimeOffset.UtcNow;
@@ -487,6 +595,7 @@ public sealed record OsOption(OperatingSystemKind? Os, string Display);
 public sealed record ProxyOption(Guid? Id, string Display);
 public sealed record EngineOption(string? Path, string Display);
 public sealed record RotationOption(int Days, string Display);
+public sealed record TlsOption(string Mode, string Display);
 
 public sealed partial class SeedHistoryItemViewModel : ObservableObject
 {

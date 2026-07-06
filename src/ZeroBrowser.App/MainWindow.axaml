@@ -17,8 +17,8 @@
       <Button Content="Batch create" Command="{Binding BatchCreateCommand}" ToolTip.Tip="Create 10 profiles at once with unique fingerprints" />
       <Button Content="Proxies"      Command="{Binding OpenProxyManagerCommand}" />
       <Button Content="Reload"       Command="{Binding ReloadCommand}" />
-      <TextBox  Watermark="Search name/notes/seed…" Text="{Binding SearchText, Mode=TwoWay}" Width="160" />
-      <TextBox  Watermark="Filter tag…" Text="{Binding FilterTag, Mode=TwoWay}" Width="100" />
+      <TextBox  PlaceholderText="Search name/notes/seed…" Text="{Binding SearchText, Mode=TwoWay}" Width="160" />
+      <TextBox  PlaceholderText="Filter tag…" Text="{Binding FilterTag, Mode=TwoWay}" Width="100" />
       <Button Content="Clear" Command="{Binding ClearFiltersCommand}" />
       <TextBlock Text="Zero Browser — multi-profile fingerprint manager"
                  VerticalAlignment="Center" Margin="20,0,0,0"

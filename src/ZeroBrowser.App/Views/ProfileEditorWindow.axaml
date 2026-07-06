@@ -72,6 +72,41 @@
                                FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
 
+                <StackPanel>
+                    <TextBlock Text="TLS / JA3 fingerprint diversion" FontSize="12" Margin="0,0,0,4"/>
+                    <ComboBox ItemsSource="{Binding TlsOptions}"
+                              SelectedItem="{Binding SelectedTls, Mode=TwoWay}"
+                              HorizontalAlignment="Stretch">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:TlsOption">
+                                <TextBlock Text="{Binding Display}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBlock Text="Diversifies the TLS ClientHello (JA3) per profile. Requires local Root CA installed to trust self-signed leaf certs. Domains with certificate pinning (Google, banks) may fail — see Settings."
+                               FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+                        <Button Content="Test TLS/CA setup" FontSize="11" Padding="8,4"
+                                Command="{Binding TestTlsCommand}"
+                                ToolTip.Tip="Open tls.peet.ws to verify JA3 fingerprint"/>
+                        <Button Content="Install Root CA" FontSize="11" Padding="8,4"
+                                Command="{Binding InstallCaCommand}"
+                                ToolTip.Tip="Install ZeroBrowser's local Root CA into the OS trust store (requires permission)"/>
+                        <Button Content="Revoke Root CA" FontSize="11" Padding="8,4"
+                                Command="{Binding RevokeCaCommand}"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding TlsStatusMessage}" FontSize="11" Opacity="0.7" Margin="0,6,0,0"
+                               IsVisible="{Binding TlsStatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+                    <Border Background="#33FFA000" BorderBrush="#FFE65100" BorderThickness="1"
+                            CornerRadius="4" Padding="8,6" Margin="0,8,0,0">
+                        <TextBlock Text="{Binding TlsLimitationMessage}"
+                                   TextWrapping="Wrap" FontSize="11" Foreground="#FF6D4C41"/>
+                    </Border>
+                </StackPanel>
+                    <TextBlock Text="When enabled, the fingerprint seed auto-rotates before launch. Old seeds are archived."
+                               FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,4,0,0"/>
+
                 <Border BorderBrush="#22000000" BorderThickness="1" CornerRadius="6" Padding="12">
                     <StackPanel Spacing="6">
                         <TextBlock Text="Seed history" FontWeight="SemiBold" FontSize="13"/>

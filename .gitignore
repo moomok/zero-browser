@@ -38,6 +38,7 @@ coverage*.info
 ## Local Chromium downloads (PuppeteerSharp)
 .local-chromium/
 puppeteer-cache/
+vendor/chromium/
 
 ## Local app data (do NOT commit user profiles)
 **/ZeroBrowser/profiles/

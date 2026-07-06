@@ -45,7 +45,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             var all = _profiles.ListAll();
             return all.Select(p =>
             {
-                var fp = _generator.Generate(p.FingerprintSeed, p.PinnedOs);
+                var fp = _generator.Generate(p.FingerprintSeed, p.PinnedOs, p.TlsDiversionMode);
                 return new ProfileItemViewModel(p, fp);
             }).ToList();
         });
@@ -137,7 +137,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 }
             }
 
-            var fp = _generator.Generate(profile.FingerprintSeed, profile.PinnedOs);
+            var fp = _generator.Generate(profile.FingerprintSeed, profile.PinnedOs, profile.TlsDiversionMode);
             var proxy = profile.ProxyId is { } id ? _proxies.Get(id) : null;
             var extensions = _profiles.ListExtensions(profile.Id);
             var session = await _launcher.LaunchAsync(new LaunchRequest(
@@ -148,7 +148,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 Headless: false,
                 Extensions: extensions));
             item.Status = session.IsRunning ? "running" : "exited";
-            StatusMessage = $"Launched {item.Name}";
+            var warning = _launcher.LastWarning;
+            StatusMessage = warning is null
+                ? $"Launched {item.Name}"
+                : $"Launched {item.Name} — ⚠ {warning}";
 
             // Persist last-used
             profile.LastUsedAt = DateTimeOffset.UtcNow;

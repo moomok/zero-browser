@@ -78,6 +78,47 @@ public class FingerprintGeneratorTests
         fp.UserAgent.Should().EndWith("Safari/537.36");
     }
 
+    [Theory]
+    [InlineData("chrome", "102.0.5005.63", "Chrome/102.0.5005.63")]
+    [InlineData("firefox", "105.0", "Firefox/105.0")]
+    [InlineData("safari", "16.0", "Version/16.0")]
+    [InlineData("edge", "106.0.5005.63", "Edg/106.0.5005.63")]
+    public void TlsMode_locks_browser_version_and_ua(string tlsMode, string expectedVersion, string expectedUaFragment)
+    {
+        var fp = _generator.Generate("any-seed", null, tlsMode);
+        fp.BrowserVersion.Should().Be(expectedVersion);
+        fp.UserAgent.Should().Contain(expectedUaFragment);
+    }
+
+    [Theory]
+    [InlineData("chrome")]
+    [InlineData("edge")]
+    public void TlsMode_chrome_edge_produces_sec_ch_ua(string tlsMode)
+    {
+        var fp = _generator.Generate("any-seed", null, tlsMode);
+        fp.SecChUa.Should().NotBeEmpty();
+        fp.SecChUa.Should().Contain(tlsMode == "chrome" ? "Google Chrome" : "Microsoft Edge");
+    }
+
+    [Theory]
+    [InlineData("firefox")]
+    [InlineData("safari")]
+    public void TlsMode_firefox_safari_produces_empty_sec_ch_ua(string tlsMode)
+    {
+        var fp = _generator.Generate("any-seed", null, tlsMode);
+        fp.SecChUa.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void TlsMode_none_preserves_random_version_selection()
+    {
+        // No TLS pin: should fall back to random selection from ChromeVersions.
+        // The seed must produce some Chrome/<v> UA (which our dataset still contains
+        // modern 145-150 entries).
+        var fp = _generator.Generate("any-seed", null, null);
+        fp.UserAgent.Should().Contain("Chrome/");
+    }
+
     [Fact]
     public void Languages_match_timezone_locale()
     {

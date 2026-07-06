@@ -8,11 +8,21 @@ namespace ZeroBrowser.Core.Fingerprint;
 /// Sources: official Chrome release notes, public fingerprint research datasets,
 /// Sec-CH-UA documentation, MDN.
 /// </summary>
-internal static class FingerprintDataset
+public static class FingerprintDataset
 {
-    /// <summary>Recent stable Chromium milestone versions (full version strings).</summary>
+    /// <summary>
+    /// Recent stable Chromium milestone versions (full version strings).
+    /// Includes older versions corresponding to the deterministic uTLS
+    /// templates used by the Go+uTLS sidecar — when a profile pins a TLS
+    /// mode (chrome/firefox/safari/edge) we force the browser version to
+    /// match the template version to avoid UA↔TLS inconsistency.
+    /// </summary>
     public static readonly string[] ChromeVersions =
     {
+        // Older — matched to uTLS presets (see TlsTemplateVersionMap below)
+        "102.0.5005.63",     // Chrome_102 (deterministic, May 2022)
+        "100.0.4896.75",     // Chrome_100 (deterministic, Mar 2022)
+        // Recent stable
         "145.0.7632.77",
         "145.0.7632.119",
         "146.0.7680.81",
@@ -27,8 +37,66 @@ internal static class FingerprintDataset
         "150.0.7871.47"
     };
 
+    /// <summary>
+    /// Firefox versions matching the deterministic uTLS Firefox templates.
+    /// Format is "major.0" (Gecko/Firefox only expose major.minor in UA, not patch).
+    /// </summary>
+    public static readonly string[] FirefoxVersions =
+    {
+        "105.0",     // Firefox_105
+        "102.0",     // Firefox_102
+        "99.0"       // Firefox_99
+    };
+
+    /// <summary>
+    /// Safari versions matching the deterministic uTLS Safari template.
+    /// Format: "major.0 Safari/605.1.15" rendered at UA build time.
+    /// </summary>
+    public static readonly string[] SafariVersions =
+    {
+        "16.0"       // Safari_16_0
+    };
+
+    /// <summary>
+    /// Edge versions matching the deterministic uTLS Edge template.
+    /// </summary>
+    public static readonly string[] EdgeVersions =
+    {
+        "106.0.5005.63",     // Edge_106
+        "85.0.564.51"        // Edge_85
+    };
+
+    /// <summary>
+    /// Single source of truth mapping a TLS template mode (matching the
+    /// Go+uTLS sidecar's <c>fingerprint/selector.go</c>) to the exact
+    /// browser version the UA layer must report. Keeping this in C# so the
+    /// FingerprintGenerator can enforce consistency at generation time
+    /// without round-tripping through Go.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> TlsTemplateVersionMap =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            // mode → version
+            ["chrome"]    = "102.0.5005.63",   // Chrome_102 preset (deterministic)
+            ["firefox"]   = "105.0",           // Firefox_105 preset
+            ["safari"]    = "16.0",            // Safari_16_0 preset
+            ["edge"]      = "106.0.5005.63",   // Edge_106 preset
+            // "randomized" picks deterministically per-seed; no single version
+        };
+
     public static string MajorOf(string fullVersion) =>
         fullVersion.Split('.')[0];
+
+    /// <summary>
+    /// Returns the version that should be used for a given TLS mode, or null
+    /// if the mode is "none"/"randomized"/unrecognized. Used by
+    /// FingerprintGenerator when a profile has a TLS pin.
+    /// </summary>
+    public static string? VersionForTlsMode(string? tlsMode)
+    {
+        if (string.IsNullOrWhiteSpace(tlsMode)) return null;
+        return TlsTemplateVersionMap.TryGetValue(tlsMode, out var v) ? v : null;
+    }
 
     /// <summary>Realistic screen resolutions per OS family.</summary>
     public static readonly Dictionary<OperatingSystemKind, (int W, int H)[]> ScreenResolutions = new()
