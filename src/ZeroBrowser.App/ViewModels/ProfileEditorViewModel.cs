@@ -149,12 +149,7 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
         var currentTls = (_profile.TlsDiversionMode ?? "none").ToLowerInvariant();
         SelectedTls = TlsOptions.FirstOrDefault(t => t.Mode == currentTls) ?? TlsOptions[0];
 
-        TlsLimitationMessage =
-            $"⚠ TLS/JA3 diversion is currently disabled in this build. " +
-            $"CipherSuitesPolicy cannot control cipher ORDER or ClientHello extensions " +
-            $"(both hashed by JA3), so the produced fingerprint would not match any real " +
-            $"browser and would be flagged as a bot. Settings are saved for a future Go+uTLS " +
-            $"sidecar. See README.";
+        TlsLimitationMessage = ZeroBrowser.Browser.Tls.TlsSupport.LimitationReason;
 
         UpdatePreview();
         RefreshToken();
@@ -237,7 +232,7 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
     [RelayCommand]
     private async Task TestTlsAsync()
     {
-        TlsStatusMessage = "Generating TLS report…";
+        TlsStatusMessage = "Starting TLS sidecar…";
         try
         {
             var mode = SelectedTls?.Mode ?? "none";
@@ -249,17 +244,28 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
 
             if (!ZeroBrowser.Browser.Tls.TlsSupport.IsAvailable)
             {
-                TlsStatusMessage = $"TLS diversion is disabled in this build ({ZeroBrowser.Browser.Tls.TlsSupport.Platform}). " +
-                                   $"Cipher suite order + ClientHello extensions can't be controlled by .NET — " +
-                                   $"JA3 hash would not match any real browser. See README.";
+                TlsStatusMessage = $"TLS sidecar binary not found for {ZeroBrowser.Browser.Tls.TlsSupport.Platform}. " +
+                                   "Build it with zero-browser-tls-sidecar/build.ps1.";
                 return;
             }
 
-            // Generate a temporary sidecar + check that the cipher suite set is non-empty.
-            await using var proxy = await ZeroBrowser.Browser.Tls.TlsSidecarProxy.CreateAsync(
-                FingerprintSeed ?? Guid.NewGuid().ToString("N"),
-                mode);
-            TlsStatusMessage = $"Sidecar ready on 127.0.0.1:{proxy.Port}. Cipher suites: {_countCipherSuites(mode)}. Launch a browser to test via tls.peet.ws.";
+            // Ensure Root CA exists before launching sidecar.
+            if (!ZeroBrowser.Browser.Tls.TlsCertificateAuthority.Exists)
+                ZeroBrowser.Browser.Tls.TlsCertificateAuthority.Generate();
+
+            var sidecarPath = ZeroBrowser.Browser.Tls.TlsSupport.ResolveSidecarPath()!;
+            var port = 39000 + Random.Shared.Next(0, 2000);
+            await using var proc = await ZeroBrowser.Browser.Tls.SidecarProcess.StartAsync(
+                sidecarPath: sidecarPath,
+                port: port,
+                profileId: _profile.Id.ToString("N"),
+                fingerprintMode: mode,
+                seed: FingerprintSeed ?? Guid.NewGuid().ToString("N"),
+                caCertPath: ZeroBrowser.Browser.Tls.TlsCertificateAuthority.CertPath,
+                caKeyPath: ZeroBrowser.Browser.Tls.TlsCertificateAuthority.KeyPemPath,
+                upstreamProxy: null,
+                readyTimeout: TimeSpan.FromSeconds(5));
+            TlsStatusMessage = $"Sidecar ready on 127.0.0.1:{proc.Port}. Template: {proc.TemplateId}. Launch a browser to test via tls.peet.ws.";
         }
         catch (Exception ex)
         {
@@ -269,6 +275,7 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
 
     private static int _countCipherSuites(string mode) =>
         ZeroBrowser.Browser.Tls.TlsFingerprintPool.GetCipherSuites($"seed:{mode}", mode).Length;
+    // kept for any legacy callers; harmless.
 
     [RelayCommand]
     private async Task InstallCaAsync()

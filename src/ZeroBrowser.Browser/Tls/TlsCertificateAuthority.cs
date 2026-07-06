@@ -12,16 +12,29 @@ public static class TlsCertificateAuthority
 {
     private const string CaCertFileName = "zero-browser-ca.crt";
     private const string CaKeyFileName  = "zero-browser-ca.key";
+    private const string CaKeyPemFileName = "zero-browser-ca.key.pem";
 
-    /// <summary>Full path to the CA certificate file.</summary>
+    /// <summary>Full path to the CA certificate file (PEM).</summary>
     public static string CertPath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                      "ZeroBrowser", "tls", CaCertFileName);
 
-    /// <summary>Full path to the CA private key file (encrypted).</summary>
+    /// <summary>Full path to the CA private key file (encrypted, internal use).</summary>
     public static string KeyPath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                      "ZeroBrowser", "tls", CaKeyFileName);
+
+    /// <summary>
+    /// Full path to the CA private key file in PEM form, readable by external
+    /// processes like the Go+uTLS sidecar. Generated alongside <see cref="KeyPath"/>
+    /// whenever <see cref="Generate"/> runs. Stored as plaintext PEM (the same
+    /// secret-box wrapping done for the legacy key file is not applied here —
+    /// the directory permission is the protection, matching the threat model of
+    /// any local MITM proxy tool).
+    /// </summary>
+    public static string KeyPemPath =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                     "ZeroBrowser", "tls", CaKeyPemFileName);
 
     public static bool Exists => File.Exists(CertPath) && File.Exists(KeyPath);
 
@@ -71,6 +84,26 @@ public static class TlsCertificateAuthority
         {
             File.WriteAllBytes(KeyPath, keyBytes);
         }
+
+        // Also write the key as plaintext PEM, readable by the Go sidecar.
+        var keyPem = "-----BEGIN PRIVATE KEY-----\n" +
+                     Convert.ToBase64String(keyBytes, Base64FormattingOptions.InsertLineBreaks) +
+                     "\n-----END PRIVATE KEY-----\n";
+        File.WriteAllText(KeyPemPath, keyPem);
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                // Restrict access to current user only (best-effort on Windows).
+                File.SetAttributes(KeyPemPath, File.GetAttributes(KeyPemPath) | FileAttributes.Hidden);
+            }
+            else
+            {
+                File.SetUnixFileMode(KeyPemPath,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+        }
+        catch { /* best-effort */ }
 
         return new X509Certificate2(cert.Export(X509ContentType.Pfx));
     }

@@ -43,24 +43,50 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
             await fetcher.DownloadAsync().ConfigureAwait(false);
         }
 
-        // TLS fingerprint diversion via sidecar proxy.
-        // v0.3 NOTE: this path is force-disabled because CipherSuitesPolicy
-        // cannot produce browser-matching JA3 hashes on any platform. See
-        // TlsSupport.cs for the full rationale. The profile setting is still
-        // persisted (for future Go+uTLS sidecar) but never acted on here.
-        Tls.TlsSidecarProxy? sidecar = null;
+        // TLS fingerprint diversion via external Go+uTLS sidecar (v0.4).
+        // The legacy in-process CipherSuitesPolicy implementation was retired
+        // because it cannot produce browser-matching JA3 hashes (see commit
+        // 148e8b2). The new sidecar gives byte-level ClientHello control.
+        Tls.SidecarProcess? tlsSidecar = null;
         var tlsMode = request.Profile.TlsDiversionMode ?? "none";
         if (!string.IsNullOrWhiteSpace(tlsMode) && tlsMode != "none")
         {
-            var requestedMode = tlsMode;
-            tlsMode = "none";
-            var warning = Tls.TlsSupport.IsAvailable
-                ? $"TLS diversion mode '{requestedMode}' requested but sidecar failed to start; launching without diversion."
-                : $"TLS diversion mode '{requestedMode}' requested but disabled on this platform ({Tls.TlsSupport.Platform}). " +
-                  $"CipherSuitesPolicy cannot produce browser-matching JA3 hashes — launching without diversion. " +
-                  $"See README for the planned Go+uTLS sidecar.";
-            LastWarning = warning;
-            System.Diagnostics.Debug.WriteLine("TLS diversion: " + warning);
+            try
+            {
+                tlsMode = Tls.TlsFingerprintPool.NormalizeToUserAgent(tlsMode, request.Fingerprint.UserAgent);
+                var sidecarPath = Tls.TlsSupport.ResolveSidecarPath();
+                if (sidecarPath is null)
+                {
+                    LastWarning = $"TLS diversion mode '{tlsMode}' requested but the sidecar binary is not present ({Tls.TlsSupport.Platform}/{System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()}). " +
+                                  "Run zero-browser-tls-sidecar/build.ps1 and place the binary under vendor/tls-sidecar/. Launching without diversion.";
+                    System.Diagnostics.Debug.WriteLine("TLS diversion: " + LastWarning);
+                    tlsMode = "none";
+                }
+                else
+                {
+                    var sidecarPort = FindFreeTcpPort();
+                    var upstream = request.Proxy is null ? null : BuildUpstreamProxyUrl(request.Proxy);
+                    var caPaths = EnsureLocalCaAsync().GetAwaiter().GetResult();
+                    tlsSidecar = await Tls.SidecarProcess.StartAsync(
+                        sidecarPath: sidecarPath,
+                        port: sidecarPort,
+                        profileId: request.Profile.Id.ToString("N"),
+                        fingerprintMode: tlsMode,
+                        seed: request.Profile.FingerprintSeed,
+                        caCertPath: caPaths.cert,
+                        caKeyPath: caPaths.key,
+                        upstreamProxy: upstream,
+                        readyTimeout: TimeSpan.FromSeconds(5),
+                        ct: ct).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                LastWarning = $"TLS sidecar failed to start ({ex.Message}); launching without diversion.";
+                System.Diagnostics.Debug.WriteLine("TLS diversion: " + LastWarning);
+                tlsSidecar = null;
+                tlsMode = "none";
+            }
         }
 
         var args = new List<string>
@@ -74,18 +100,18 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
         };
 
         // Disable QUIC when TLS diversion is active — QUIC can't be MITMed.
-        if (sidecar is not null)
+        if (tlsSidecar is not null)
         {
             args.Add("--disable-quic");
             args.Add("--disable-features=UseChromeOSDirectVideoDecoder,PreconnectToSearch,NetworkServiceInProcess");
         }
 
-        if (sidecar is not null)
+        if (tlsSidecar is not null)
         {
             // Route all browser traffic through our TLS-diversion sidecar.
-            // Inside the sidecar, the TLS leg uses the spoofed cipher suites.
-            args.Add($"--proxy-server=http://127.0.0.1:{sidecar.Port}");
-            // Also no_PROXY for any management endpoints (none currently).
+            // Inside the sidecar, the TLS leg uses uTLS to emit a real
+            // browser-matching ClientHello.
+            args.Add($"--proxy-server=http://127.0.0.1:{tlsSidecar.Port}");
         }
         else if (request.Proxy is not null)
         {
@@ -247,7 +273,7 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
             await page.GoToAsync(request.StartUrl).ConfigureAwait(false);
         }
 
-        return new PuppeteerBrowserSession(request.Profile, browser, sidecar);
+        return new PuppeteerBrowserSession(request.Profile, browser, tlsSidecar);
     }
 
     private static CookieParam ToCookieParam(CookieRecord c) => new()
@@ -267,15 +293,65 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
         },
         Expires   = c.ExpiresUnix
     };
+
+    private static int FindFreeTcpPort()
+    {
+        var l = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        l.Start();
+        var port = ((System.Net.IPEndPoint)l.LocalEndpoint).Port;
+        l.Stop();
+        return port;
+    }
+
+    private static string? BuildUpstreamProxyUrl(ZeroBrowser.Core.Models.ProxyEntry proxy)
+    {
+        var scheme = proxy.Type switch
+        {
+            ZeroBrowser.Core.Models.ProxyType.Http   => "http",
+            ZeroBrowser.Core.Models.ProxyType.Https  => "https",
+            ZeroBrowser.Core.Models.ProxyType.Socks5 => "socks5",
+            _ => null
+        };
+        if (scheme is null) return null;
+        var host = proxy.Host;
+        var userInfo = "";
+        if (!string.IsNullOrEmpty(proxy.Username))
+        {
+            var u = Uri.EscapeDataString(proxy.Username);
+            var p = Uri.EscapeDataString(proxy.Password ?? "");
+            userInfo = $"{u}:{p}@";
+        }
+        return $"{scheme}://{userInfo}{host}:{proxy.Port}";
+    }
+
+    /// <summary>
+    /// Ensure a local Root CA exists and return its cert + key paths.
+    /// The CA is generated on first use by <see cref="Tls.TlsCertificateAuthority"/>
+    /// (same one that the C# code already uses for the v0.3 Test button).
+    /// </summary>
+    private static Task<(string cert, string key)> EnsureLocalCaAsync()
+    {
+        if (!Tls.TlsCertificateAuthority.Exists)
+        {
+            Tls.TlsCertificateAuthority.Generate();
+        }
+        var cert = Tls.TlsCertificateAuthority.CertPath;
+        var key = Tls.TlsCertificateAuthority.KeyPemPath;
+        if (!System.IO.File.Exists(cert) || !System.IO.File.Exists(key))
+        {
+            throw new System.IO.FileNotFoundException("Root CA files missing after generate", cert);
+        }
+        return Task.FromResult((cert, key));
+    }
 }
 
 internal sealed class PuppeteerBrowserSession : IBrowserSession
 {
     private readonly IBrowser _browser;
-    private readonly Tls.TlsSidecarProxy? _sidecar;
+    private readonly Tls.SidecarProcess? _sidecar;
     public Profile Profile { get; }
 
-    public PuppeteerBrowserSession(Profile profile, IBrowser browser, Tls.TlsSidecarProxy? sidecar = null)
+    public PuppeteerBrowserSession(Profile profile, IBrowser browser, Tls.SidecarProcess? sidecar = null)
     {
         Profile = profile;
         _browser = browser;

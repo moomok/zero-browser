@@ -1,61 +1,77 @@
+using System;
+using System.IO;
 using System.Runtime.InteropServices;
 
 namespace ZeroBrowser.Browser.Tls;
 
 /// <summary>
-/// Runtime support check for the in-process TLS fingerprint diversion feature.
+/// Runtime support check for the TLS/JA3 fingerprint diversion feature.
 ///
-/// As of v0.3 the diversion relies on <see cref="System.Net.Security.CipherSuitesPolicy"/>.
-/// That API has two fundamental limitations that prevent it from producing
-/// realistic JA3 hashes on ANY platform:
+/// As of v0.4 the diversion is implemented by a separate Go binary
+/// (see <c>zero-browser-tls-sidecar/</c>) that uses uTLS to construct a
+/// ClientHello whose JA3 hash matches a real browser byte-for-byte. Unlike
+/// the previous in-process CipherSuitesPolicy approach, this works
+/// identically on Windows, macOS, and Linux.
 ///
-///   1. <c>CipherSuitesPolicy</c> only filters the cipher suite list; it does NOT
-///      control the order in which the OS TLS stack (SChannel on Windows,
-///      OpenSSL on Linux/macOS) sends them in the ClientHello. JA3 hashes the
-///      cipher list in transmission order, so the resulting hash is "alien"
-///      (does not match any real browser) and is flagged by anti-bot systems.
-///
-///   2. JA3 also hashes the ClientHello extensions (supported_groups,
-///      signature_algorithms, ALPN, psk_key_exchange_modes, …) and their order.
-///      <c>CipherSuitesPolicy</c> does not let us override extensions at all.
-///      .NET's <c>SslStream</c> emits its own extension set which differs from
-///      any real browser.
-///
-/// On top of that, <c>CipherSuitesPolicy</c> itself throws
-/// <see cref="PlatformNotSupportedException"/> on Windows (only Linux w/ OpenSSL
-/// 1.1.1+ and macOS support it), so the cipher-list override is silently
-/// unavailable on the primary target platform.
-///
-/// Conclusion: the <c>CipherSuitesPolicy</c> approach cannot produce
-/// browser-matching JA3 hashes anywhere. We disable the feature at runtime
-/// and direct users to the planned Go+uTLS sidecar (see README roadmap).
-///
-/// <see cref="IsAvailable"/> therefore returns <c>false</c> on every platform
-/// until a real implementation lands.
+/// <see cref="IsAvailable"/> returns true when a sidecar binary is found
+/// alongside the host application. The binary is expected at
+/// <c>vendor/tls-sidecar/{platform}-{arch}/zero-browser-tls-sidecar[.exe]</c>.
 /// </summary>
 public static class TlsSupport
 {
     /// <summary>
-    /// True only when the runtime can actually emit a ClientHello whose JA3
-    /// hash matches a real browser. Currently always false.
+    /// True only when the Go sidecar binary is present and executable.
     /// </summary>
-    public static bool IsAvailable => false;
+    public static bool IsAvailable
+    {
+        get
+        {
+            try
+            {
+                return File.Exists(GetSidecarPath());
+            }
+            catch
+            {
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resolves the absolute path to the sidecar binary for the current
+    /// platform. Returns null if the binary is not bundled.
+    /// </summary>
+    public static string? ResolveSidecarPath()
+    {
+        var path = GetSidecarPath();
+        return File.Exists(path) ? path : null;
+    }
 
     /// <summary>
     /// Short human-readable reason the feature is unavailable on this build.
     /// Used in the UI to explain why the TLS dropdown is forced to "none".
     /// </summary>
-    public static string LimitationReason =>
-        "TLS/JA3 diversion is currently disabled. The .NET CipherSuitesPolicy API " +
-        "cannot control cipher suite ORDER or ClientHello extensions, both of which " +
-        "are hashed by JA3 — so the resulting hash does not match any real browser " +
-        "and gets flagged by anti-bot systems. A Go+uTLS sidecar is planned; see README.";
+    public static string LimitationReason => IsAvailable
+        ? $"TLS/JA3 diversion is ACTIVE in this build (Go+uTLS sidecar detected at {GetSidecarPath()})."
+        : $"TLS/JA3 diversion is unavailable: the Go+uTLS sidecar binary was not found at the expected location ({GetSidecarPath()}). " +
+          $"Build it with `zero-browser-tls-sidecar/build.ps1` and place it under vendor/tls-sidecar/{{platform}}-{{arch}}/.";
 
     /// <summary>
-    /// Detected platform string for diagnostics.
+    /// Detected platform string for diagnostics and the binary path prefix.
     /// </summary>
     public static string Platform =>
         RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "windows" :
-        RuntimeInformation.IsOSPlatform(OSPlatform.OSX)     ? "macos"   :
+        RuntimeInformation.IsOSPlatform(OSPlatform.OSX)     ? "darwin"  :
                                                               "linux";
+
+    private static string GetSidecarPath()
+    {
+        var exeName = Platform == "windows"
+            ? "zero-browser-tls-sidecar.exe"
+            : "zero-browser-tls-sidecar";
+        var arch = RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
+        // AppContext.BaseDirectory is the directory of the host .NET assembly.
+        var baseDir = AppContext.BaseDirectory;
+        return Path.Combine(baseDir, "vendor", "tls-sidecar", $"{Platform}-{arch}", exeName);
+    }
 }
