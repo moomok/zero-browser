@@ -48,6 +48,13 @@ public sealed class SidecarProcess : IAsyncDisposable
         if (!File.Exists(sidecarPath))
             throw new FileNotFoundException("sidecar binary not found", sidecarPath);
 
+        // On Linux/macOS, the sidecar binary must be user-executable. If it
+        // was copied from a Windows filesystem (FAT32/NTFS) or extracted from
+        // a zip that didn't preserve mode bits, Process.Start will fail with
+        // "Permission denied" on Linux and "Bad CPU type in program" or similar
+        // on macOS. Set the exec bit defensively here — it's a no-op on Windows.
+        ExecutablePermissions.EnsureUserExecutable(sidecarPath);
+
         var psi = new ProcessStartInfo
         {
             FileName = sidecarPath,

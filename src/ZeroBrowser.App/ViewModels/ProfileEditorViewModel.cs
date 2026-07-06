@@ -292,10 +292,19 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
         {
             if (!ZeroBrowser.Browser.Tls.TlsCertificateAuthority.Exists)
                 ZeroBrowser.Browser.Tls.TlsCertificateAuthority.Generate();
-            var ok = await ZeroBrowser.Browser.Tls.TlsCertificateAuthority.InstallToTrustStoreAsync();
-            TlsStatusMessage = ok
-                ? "Root CA installed. Restart browser profiles to pick up trusted certs."
-                : "Install failed — try running the app as administrator, or see OS docs.";
+            var result = await ZeroBrowser.Browser.Tls.TlsCertificateAuthority.InstallToTrustStoreAsync();
+            TlsStatusMessage = result.Status switch
+            {
+                ZeroBrowser.Browser.Tls.CaTrustStoreOpStatus.Success =>
+                    "Root CA installed. Restart browser profiles to pick up trusted certs.",
+                ZeroBrowser.Browser.Tls.CaTrustStoreOpStatus.AlreadyPresent =>
+                    "Root CA already trusted.",
+                ZeroBrowser.Browser.Tls.CaTrustStoreOpStatus.PrerequisiteMissing =>
+                    $"Install prerequisites missing: {result.Reason}",
+                ZeroBrowser.Browser.Tls.CaTrustStoreOpStatus.UnsupportedOnPlatform =>
+                    $"Install not supported: {result.Reason}",
+                _ => $"Install failed: {result.Reason}",
+            };
         }
         catch (Exception ex)
         {
@@ -308,8 +317,17 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
     {
         try
         {
-            var ok = await ZeroBrowser.Browser.Tls.TlsCertificateAuthority.RevokeFromTrustStoreAsync();
-            TlsStatusMessage = ok ? "Root CA revoked." : "Revoke failed; remove manually from OS trust store.";
+            var result = await ZeroBrowser.Browser.Tls.TlsCertificateAuthority.RevokeFromTrustStoreAsync();
+            TlsStatusMessage = result.Status switch
+            {
+                ZeroBrowser.Browser.Tls.CaTrustStoreOpStatus.Success =>
+                    "Root CA revoked.",
+                ZeroBrowser.Browser.Tls.CaTrustStoreOpStatus.UnsupportedOnPlatform =>
+                    $"Revoke not automated on this platform — {result.Reason}",
+                ZeroBrowser.Browser.Tls.CaTrustStoreOpStatus.Failed =>
+                    $"Revoke failed: {result.Reason}",
+                _ => result.Reason,
+            };
         }
         catch (Exception ex)
         {
