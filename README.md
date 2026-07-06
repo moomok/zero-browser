@@ -12,7 +12,7 @@ Inspirasi: Multilogin / GoLogin / AdsPower / Dolphin Anty / Kameleo — versi op
 
 ## Status
 
-**v0.3** — fungsional sudah lengkap untuk daily use, plus fitur multi-fingerprint level enterprise:
+**v0.4** — TLS / JA3 anti-fingerprint diversion shipped (Go+uTLS sidecar) + CI-verified on Linux & macOS:
 
 ### Core
 - ✅ FingerprintGenerator deterministik (seed → fingerprint konsisten antar sesi)
@@ -21,10 +21,10 @@ Inspirasi: Multilogin / GoLogin / AdsPower / Dolphin Anty / Kameleo — versi op
 - ✅ Per-profile user-data-dir, proxy server + auth, timezone emulation
 - ✅ Storage SQLite + AES-256-GCM + Argon2id
 - ✅ Avalonia UI 12 (cross-platform native, Fluent Design)
-- ✅ **68 unit tests passing** (Win/Mac/Linux)
+- ✅ **93 unit tests passing** (Win/Mac/Linux)
 
 ### Identity & Security
-- ✅ **TLS / JA3 fingerprint diversion via Go+uTLS sidecar — v0.4.** Replaces the in-process `CipherSuitesPolicy` (retired, see `148e8b2`) with an external `zero-browser-tls-sidecar` Go binary that uses `github.com/refraction-networking/utls` to construct the ClientHello byte-for-byte. Same code path on Windows / macOS / Linux. UA version pinned to the exact uTLS template version (no UA↔TLS inconsistency detection signal). **Verified:** Chromium 148 e2e on Windows → JA3_hash `cd08e31494f9531f560d64c695473da9` (Chrome_102 preset) reported by tls.peet.ws (see commit `7578e22` + `3132752`). **Cross-platform lifecycle + JA3 verified on Linux + macOS** by `.github/workflows/sidecar-e2e.yml` (note: macOS job runs JA3 verify only — full CA-install + Chromium-with-MITM is partial coverage because macOS `security add-trusted-cert` to System keychain needs a GUI sudo prompt unavailable in headless CI).
+- ✅ **TLS / JA3 fingerprint diversion via Go+uTLS sidecar** — Replaces the in-process `CipherSuitesPolicy` (retired, see `148e8b2`) with an external `zero-browser-tls-sidecar` Go binary that uses `github.com/refraction-networking/utls` to construct the ClientHello byte-for-byte. Same code path on Windows / macOS / Linux. UA version pinned to the exact uTLS template version (no UA↔TLS inconsistency detection signal). **Verified end-to-end:** Chromium 148 e2e on Windows → JA3_hash `cd08e31494f9531f560d64c695473da9` (Chrome_102 preset) reported by tls.peet.ws (see commits `7578e22`, `3132752`, `fdbb7e1`). **Cross-platform lifecycle + JA3 verified on Linux + macOS-14** by `.github/workflows/sidecar-e2e.yml` (both jobs green in CI run `28808868541`). Note: macOS job runs JA3 handshake verify only — full CA-install + Chromium-with-MITM is partial coverage because macOS `security add-trusted-cert` to System keychain needs a GUI sudo prompt unavailable in headless CI.
 - ✅ **Master password lock di app start** (Argon2id-derived SecretBox; sensitive data di disk dienkripsi)
 - ✅ **Encrypted fingerprint token** — format portable `base64_key|base64_payload|base64_iv|flags|ver` (AES-256-GCM)
 - ✅ **Proxy manager + bulk import** + **connectivity test** (Test / Test All via httpbin.org/ip)
@@ -79,8 +79,8 @@ ZeroBrowser.sln
 │  ├─ ZeroBrowser.Storage/      (SQLite repo + crypto: SecretBox, MasterKey)
 │  ├─ ZeroBrowser.Browser/      (PuppeteerSharp launcher + CDP injection + browser detection)
 │  └─ ZeroBrowser.App/          (Avalonia UI, MVVM, entry point)
-└─ tests/
-   └─ ZeroBrowser.Tests/        (xUnit, 68 tests, runs on Linux/Mac/Win)
+   └─ tests/
+      └─ ZeroBrowser.Tests/        (xUnit, 93 tests, runs on Linux/Mac/Win)
 ```
 
 ---
@@ -99,7 +99,7 @@ ZeroBrowser.sln
 git clone https://github.com/moomok/zero-browser.git
 cd zero-browser
 dotnet build
-dotnet test                      # 68 tests
+dotnet test                      # 93 tests
 dotnet run --project src/ZeroBrowser.App
 ```
 
@@ -109,14 +109,14 @@ Cara cepat: pakai script bantu di `scripts/`.
 
 #### Windows MSIX + portable zip
 ```powershell
-./scripts/build-msix.ps1 -Version "0.3.0.0"
+./scripts/build-msix.ps1 -Version "0.4.0.0"
 ```
 
 #### Linux / macOS portable archive
 ```bash
-./scripts/build-portable.sh linux-x64  0.3.0  artifacts
-./scripts/build-portable.sh osx-arm64  0.3.0  artifacts   # Apple Silicon
-./scripts/build-portable.sh osx-x64    0.3.0  artifacts   # Intel
+./scripts/build-portable.sh linux-x64  0.4.0  artifacts
+./scripts/build-portable.sh osx-arm64  0.4.0  artifacts   # Apple Silicon
+./scripts/build-portable.sh osx-x64    0.4.0  artifacts   # Intel
 ```
 
 Atau langsung `dotnet publish` (manual, tanpa archive):
