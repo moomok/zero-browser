@@ -1,7 +1,18 @@
 param(
-    [string]$GoBin = "C:\bot\go\bin\go.exe",
+    [string]$GoBin,
     [string]$OutDir = "$PSScriptRoot\..\vendor\tls-sidecar"
 )
+
+if (-not $GoBin) {
+    $detected = (Get-Command go -ErrorAction SilentlyContinue).Source
+    if ($detected) {
+        $GoBin = $detected
+    } elseif ($IsWindows -or $env:OS -match 'Windows') {
+        $GoBin = "C:\bot\go\bin\go.exe"
+    } else {
+        throw "Could not locate `go` in PATH. Set -GoBin or install Go (apt/brew)."
+    }
+}
 
 $ErrorActionPreference = "Stop"
 
