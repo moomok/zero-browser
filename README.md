@@ -24,7 +24,7 @@ Inspirasi: Multilogin / GoLogin / AdsPower / Dolphin Anty / Kameleo — versi op
 - ✅ **68 unit tests passing** (Win/Mac/Linux)
 
 ### Identity & Security
-- ⚠ **TLS / JA3 fingerprint diversion — DISABLED in this build.** The v0.3 implementation relied on `System.Net.Security.CipherSuitesPolicy`, which has two fundamental limitations: (1) it cannot control cipher suite **order** in the ClientHello, and (2) it cannot override ClientHello extensions. Both are hashed into JA3, so the resulting fingerprint would not match any real browser and would itself become a detection signal. On Windows, the API additionally throws `PlatformNotSupportedException`. A future v0.4 will swap this for a Go+uTLS sidecar (`github.com/refraction-networking/utls`) that constructs the ClientHello byte-for-byte. The profile setting is still persisted; the UI shows a red banner explaining the limitation.
+- 🟡 **TLS / JA3 fingerprint diversion via Go+uTLS sidecar — v0.4 alpha.** Replaces the in-process `CipherSuitesPolicy` (retired, see `148e8b2`) with an external `zero-browser-tls-sidecar` Go binary that uses `github.com/refraction-networking/utls` to construct the ClientHello byte-for-byte. Same code path on Windows / macOS / Linux. Verified empirically on Windows + Chrome 106 (see verification report below); other templates + platforms need user validation before this can be marked ✅.
 - ✅ **Master password lock di app start** (Argon2id-derived SecretBox; sensitive data di disk dienkripsi)
 - ✅ **Encrypted fingerprint token** — format portable `base64_key|base64_payload|base64_iv|flags|ver` (AES-256-GCM)
 - ✅ **Proxy manager + bulk import** + **connectivity test** (Test / Test All via httpbin.org/ip)

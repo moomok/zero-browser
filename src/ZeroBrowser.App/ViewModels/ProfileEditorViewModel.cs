@@ -141,15 +141,23 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
 
         // TLS / JA3 fingerprint options.
         TlsOptions.Add(new TlsOption("none",      "Off (use Chromium's default TLS stack)"));
-        TlsOptions.Add(new TlsOption("chrome",    "Chrome — TLS ClientHello like Chrome 150"));
-        TlsOptions.Add(new TlsOption("firefox",   "Firefox — TLS ClientHello like Firefox 130"));
-        TlsOptions.Add(new TlsOption("safari",    "Safari — TLS ClientHello like Safari 18"));
-        TlsOptions.Add(new TlsOption("edge",      "Edge — TLS ClientHello like Edge 150"));
-        TlsOptions.Add(new TlsOption("randomized","Randomized — deterministic pick per profile"));
+        TlsOptions.Add(new TlsOption("chrome",    "Chrome — TLS like Chrome 102 (UA locked to 102.x, May 2022)"));
+        TlsOptions.Add(new TlsOption("firefox",   "Firefox — TLS like Firefox 105 (UA locked to 105.0)"));
+        TlsOptions.Add(new TlsOption("safari",    "Safari — TLS like Safari 16.0 (UA locked to 16.0)"));
+        TlsOptions.Add(new TlsOption("edge",      "Edge — TLS like Edge 106 (UA locked to 106.x)"));
+        TlsOptions.Add(new TlsOption("randomized","Randomized — deterministic pick per profile (UA version matches)"));
         var currentTls = (_profile.TlsDiversionMode ?? "none").ToLowerInvariant();
         SelectedTls = TlsOptions.FirstOrDefault(t => t.Mode == currentTls) ?? TlsOptions[0];
 
         TlsLimitationMessage = ZeroBrowser.Browser.Tls.TlsSupport.LimitationReason;
+
+        // Surface the version-pinning implication so the user understands that
+        // changing the TLS template will force the UA / Sec-CH-UA version.
+        var pinnedVersion = ZeroBrowser.Core.Fingerprint.FingerprintDataset.VersionForTlsMode(SelectedTls?.Mode);
+        if (pinnedVersion is not null)
+        {
+            TlsLimitationMessage += $" | UA/Sec-CH-UA version will be locked to {pinnedVersion} for consistency with the {SelectedTls!.Mode} TLS fingerprint.";
+        }
 
         UpdatePreview();
         RefreshToken();
@@ -168,7 +176,7 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
         }
         try
         {
-            var fp = _generator.Generate(FingerprintSeed, SelectedOs?.Os);
+            var fp = _generator.Generate(FingerprintSeed, SelectedOs?.Os, SelectedTls?.Mode);
             PreviewUserAgent = fp.UserAgent;
             // TimezoneOffsetMinutes follows JS getTimezoneOffset() — positive = west of UTC, so display sign is inverted.
             PreviewTimezone  = $"{fp.Timezone} (UTC{(fp.TimezoneOffsetMinutes <= 0 ? "+" : "-")}{Math.Abs(fp.TimezoneOffsetMinutes) / 60:00}:{Math.Abs(fp.TimezoneOffsetMinutes) % 60:00})";
@@ -308,7 +316,6 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
             TlsStatusMessage = $"CA revoke error: {ex.Message}";
         }
     }
-}
 
     private void RefreshToken()
     {
@@ -588,6 +595,7 @@ public sealed record OsOption(OperatingSystemKind? Os, string Display);
 public sealed record ProxyOption(Guid? Id, string Display);
 public sealed record EngineOption(string? Path, string Display);
 public sealed record RotationOption(int Days, string Display);
+public sealed record TlsOption(string Mode, string Display);
 
 public sealed partial class SeedHistoryItemViewModel : ObservableObject
 {
