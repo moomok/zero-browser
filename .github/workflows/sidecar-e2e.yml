@@ -1,0 +1,147 @@
+name: sidecar-e2e
+
+# Cross-platform end-to-end verification of the Go+uTLS TLS sidecar.
+# Runs on every push to main and on PRs. Windows is covered by the
+# separate build.yml workflow (which already builds + runs all unit
+# tests on windows-latest). This workflow adds:
+#   - per-OS sidecar lifecycle regression tests (sequential + parallel
+#     + mixed Chromium-like CONNECT bursts — see proxy_test.go)
+#   - per-OS JA3 hash verification through the sidecar against
+#     tls.peet.ws (the canonical "what does the upstream see" endpoint)
+#   - Linux CA install prerequisites check (libnss3-tools)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  sidecar-e2e:
+    name: Sidecar E2E (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux
+            sidecar_subdir: linux-amd64
+            sidecar_exe: zero-browser-tls-sidecar
+          # macos-14 = Apple Silicon (M1). GitHub's macos-latest rolled over
+          # to arm64 in 2024; pinned to macos-14 explicitly so we don't
+          # depend on GitHub's "latest" definition shifting. If we ever
+          # want Intel coverage, add a second matrix entry with os=macos-13
+          # and sidecar_subdir=darwin-amd64.
+          - os: macos-14
+            label: darwin
+            sidecar_subdir: darwin-arm64
+            sidecar_exe: zero-browser-tls-sidecar
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go 1.22
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Setup .NET 8 (for build.ps1)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # build.ps1 is a PowerShell 7+ script — all three GitHub-hosted
+      # runners have pwsh preinstalled (macos-13+, ubuntu-22.04+,
+      # windows-2022).
+      - name: Cross-compile sidecar for all platforms
+        shell: pwsh
+        run: ./zero-browser-tls-sidecar/build.ps1
+
+      - name: Linux — install libnss3-tools (certutil for CA install)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libnss3-tools
+
+      # macOS — there is NO way to install the Root CA into the macOS
+      # keychain non-interactively from CI: `security add-trusted-cert`
+      # to /Library/Keychains/System.keychain needs sudo + GUI prompt.
+      # The macOS e2e job is therefore PARTIAL COVERAGE — it verifies
+      # the JA3 handshake works (InsecureSkipVerify on the leaf cert)
+      # but does NOT verify the full Chromium-with-MITM roundtrip
+      # end-to-end. That's the cost of running headless. We document
+      # this in the README so nobody mistakes green CI for full proof.
+      # Linux also runs without CA install for the JA3 verify step
+      # (same InsecureSkipVerify reason), but the lifecycle tests
+      # additionally verify the certutil-on-Linux code path.
+      - name: Run sidecar lifecycle tests (sequential + parallel + mixed)
+        working-directory: zero-browser-tls-sidecar
+        run: go test -v -count=1 ./mitm/...
+
+      - name: Run verify-via-server JA3 end-to-end check
+        working-directory: zero-browser-tls-sidecar
+        env:
+          # working-directory is zero-browser-tls-sidecar/, so the sidecar
+          # binary lives one level up under vendor/tls-sidecar/<platform>-<arch>/
+          SIDECAR: ../vendor/tls-sidecar/${{ matrix.sidecar_subdir }}/${{ matrix.sidecar_exe }}
+          CA_CERT:  ./test-ca/test-ca.crt
+          CA_KEY:   ./test-ca/test-ca.key.pem
+        run: |
+          set -euo pipefail
+          PORT=39600
+          "$SIDECAR" \
+            "--port=$PORT" \
+            --profile-id=ci-e2e \
+            --fingerprint-mode=chrome \
+            --seed=ci-seed \
+            "--ca-cert=$CA_CERT" \
+            "--ca-key=$CA_KEY" \
+            --verbose \
+            2> /tmp/sidecar.log &
+          SIDECAR_PID=$!
+          trap 'kill $SIDECAR_PID 2>/dev/null || true' EXIT
+
+          # Wait for /health (port+1).
+          for i in $(seq 1 50); do
+            if curl -fsS "http://127.0.0.1:$((PORT+1))/health" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 0.1
+          done
+          if ! curl -fsS "http://127.0.0.1:$((PORT+1))/health" >/dev/null 2>&1; then
+            echo "::error::sidecar did not become healthy within 5s"
+            cat /tmp/sidecar.log
+            exit 1
+          fi
+
+          # Run verify-via-server (Go tool that does raw CONNECT through
+          # the sidecar and parses tls.peet.ws's reported JA3).
+          go run ./cmd/verify-via-server \
+            --sidecar-port=$PORT \
+            --target=tls.peet.ws \
+            --path=/api/all \
+            2>&1 | tee /tmp/verify.out
+
+          # Extract the server-reported JA3_hash and assert it matches
+          # the Chrome_102 baseline we measured against Windows.
+          JA3_HASH=$(grep -oE 'server-reported JA3_hash = [a-f0-9]{32}' /tmp/verify.out | awk '{print $NF}')
+          if [ -z "$JA3_HASH" ]; then
+            echo "::error::could not parse JA3_hash from verify-via-server output"
+            exit 1
+          fi
+
+          EXPECTED=cd08e31494f9531f560d64c695473da9
+          if [ "$JA3_HASH" != "$EXPECTED" ]; then
+            echo "::error::JA3_hash mismatch on ${{ matrix.label }}: got=$JA3_HASH want=$EXPECTED"
+            echo "::error::this means the Chrome_102 uTLS preset produced a different ClientHello on ${{ matrix.label }} than on Windows"
+            exit 1
+          fi
+          echo "JA3 verified: $JA3_HASH matches Chrome_102 baseline on ${{ matrix.label }}"
+
+      - name: Upload sidecar stderr
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sidecar-stderr-${{ matrix.label }}
+          path: /tmp/sidecar.log
+          if-no-files-found: ignore
