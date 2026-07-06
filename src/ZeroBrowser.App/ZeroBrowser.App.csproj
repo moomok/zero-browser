@@ -31,4 +31,21 @@
     <ProjectReference Include="..\ZeroBrowser.Storage\ZeroBrowser.Storage.csproj" />
     <ProjectReference Include="..\ZeroBrowser.Browser\ZeroBrowser.Browser.csproj" />
   </ItemGroup>
+
+  <!--
+    Copy the cross-compiled Go+uTLS sidecar from the repo-root vendor/
+    tree into the build output so `dotnet build` (without publish) yields a
+    runnable app with TLS/JA3 diversion active. CI uses `dotnet publish`
+    which copies the same content files via the .pubxml; this target keeps
+    the inner-loop dev workflow honest.
+  -->
+  <Target Name="CopySidecarToOutput" AfterTargets="Build">
+    <ItemGroup>
+      <_SidecarSrc Include="..\..\vendor\tls-sidecar\**\*.*" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(_SidecarSrc)"
+      DestinationFiles="@(_SidecarSrc->'$(OutDir)vendor\tls-sidecar\%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true" />
+  </Target>
 </Project>
