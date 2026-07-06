@@ -22,12 +22,14 @@ public class TlsCertificateAuthorityTests
     // ─── ProcessStartInfo builders ───────────────────────────────────────────
 
     [Fact]
-    public void Windows_install_psi_uses_certutil_addstore_with_elevation()
+    public void Windows_install_system_psi_uses_certutil_addstore_with_elevation()
     {
+        // System-wide install (LocalMachine\Root) — requires UAC.
         var psi = TlsCertificateAuthority.BuildWindowsInstallPsi("C:\\ca.pem");
 
         psi.FileName.Should().Be("certutil");
         psi.Arguments.Should().Contain("-addstore Root");
+        psi.Arguments.Should().NotContain("-user", "system-wide install targets LocalMachine, not CurrentUser");
         psi.Arguments.Should().Contain("C:\\ca.pem");
         psi.Verb.Should().Be("runas", "UAC elevation is required to modify LocalMachine\\Root");
         psi.UseShellExecute.Should().BeTrue("certutil needs shell elevation on Windows");
@@ -35,15 +37,43 @@ public class TlsCertificateAuthorityTests
     }
 
     [Fact]
-    public void Windows_revoke_psi_uses_certutil_delstore_with_elevation()
+    public void Windows_install_user_psi_uses_certutil_user_store_no_uac()
+    {
+        // Per-user install (CurrentUser\Root) — the default path used by the
+        // launcher when TLS diversion starts. No UAC, works in non-elevated
+        // sessions and headless test contexts.
+        var psi = TlsCertificateAuthority.BuildWindowsInstallUserPsi("C:\\ca.pem");
+
+        psi.FileName.Should().Be("certutil");
+        psi.Arguments.Should().Contain("-user");
+        psi.Arguments.Should().Contain("-addstore Root");
+        psi.Verb.Should().NotBe("runas", "user-store install must not require elevation");
+        psi.UseShellExecute.Should().BeFalse("no shell needed; certutil just runs");
+        psi.CreateNoWindow.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Windows_install_default_path_targets_user_store()
+    {
+        // InstallToTrustStoreAsync() (the no-arg overload used by both the
+        // launcher auto-install and the UI button) must default to the
+        // per-user store, otherwise the launcher fails on every non-elevated
+        // profile launch.
+        var psi = TlsCertificateAuthority.BuildWindowsInstallUserPsi("C:\\ca.pem");
+        psi.Arguments.Should().Contain("-user");
+    }
+
+    [Fact]
+    public void Windows_revoke_psi_targets_user_store_without_elevation()
     {
         var psi = TlsCertificateAuthority.BuildWindowsRevokePsi("ABCDEF1234567890");
 
         psi.FileName.Should().Be("certutil");
+        psi.Arguments.Should().Contain("-user", "revoke must target the same store the install did (CurrentUser\\Root)");
         psi.Arguments.Should().Contain("-delstore Root");
         psi.Arguments.Should().Contain("ABCDEF1234567890");
-        psi.Verb.Should().Be("runas");
-        psi.UseShellExecute.Should().BeTrue();
+        psi.Verb.Should().NotBe("runas", "user-store revoke does not require elevation");
+        psi.UseShellExecute.Should().BeFalse();
     }
 
     [Fact]

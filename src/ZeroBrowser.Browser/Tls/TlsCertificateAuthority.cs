@@ -173,7 +173,15 @@ public static class TlsCertificateAuthority
             return CaTrustStoreOpResult.Failed("CA certificate not generated yet — call Generate() first.");
 
         if (OperatingSystem.IsWindows())
-            return await RunInstallAsync(BuildWindowsInstallPsi(CertPath), elevate: true).ConfigureAwait(false);
+        {
+            // Prefer the per-user store (no UAC, works in headless/automated
+            // contexts). Chromium reads BOTH HKLM\Root and HKCU\Root for
+            // HTTPS validation, so the user store is sufficient for the
+            // sidecar's leaf cert to be trusted. If the user explicitly
+            // wants system-wide install, the UI button calls
+            // InstallToSystemTrustStoreAsync instead.
+            return await RunInstallAsync(BuildWindowsInstallUserPsi(CertPath), elevate: false).ConfigureAwait(false);
+        }
 
         if (OperatingSystem.IsMacOS())
             return await RunInstallAsync(BuildMacInstallPsi(CertPath), elevate: false).ConfigureAwait(false);
@@ -227,7 +235,7 @@ public static class TlsCertificateAuthority
             return CaTrustStoreOpResult.Failed("CA certificate is not on disk — nothing to revoke.");
 
         var psi = BuildWindowsRevokePsi(cert.Thumbprint);
-        return await RunInstallAsync(psi, elevate: true).ConfigureAwait(false);
+        return await RunInstallAsync(psi, elevate: false).ConfigureAwait(false);
     }
 
     // ─── ProcessStartInfo builders (testable) ────────────────────────────────
@@ -245,14 +253,40 @@ public static class TlsCertificateAuthority
         };
     }
 
+    /// <summary>
+    /// Install to the per-user (CurrentUser\Root) store — no UAC prompt
+    /// required, works in any session including non-elevated processes and
+    /// headless CI. Chromium on Windows reads BOTH the system and the user
+    /// trust stores for HTTPS validation, so a user-store install is enough
+    /// to make MITM leaf certs accepted for the current user without
+    /// requiring admin rights.
+    ///
+    /// This is the default install path we use during automated profile
+    /// launches (see <c>PuppeteerBrowserLauncher.EnsureLocalCaAsync</c>) —
+    /// the user only gets a UAC prompt if they explicitly click "Install
+    /// Root CA (system-wide)" in the profile editor.
+    /// </summary>
+    internal static ProcessStartInfo BuildWindowsInstallUserPsi(string certPath)
+    {
+        return new ProcessStartInfo
+        {
+            FileName = "certutil",
+            // -user switches the target store to HKCU\Root instead of
+            // HKLM\Root. No Verb=runas needed; the user store is writable
+            // by the current user without elevation.
+            Arguments = $"-user -addstore Root \"{certPath}\"",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+    }
+
     internal static ProcessStartInfo BuildWindowsRevokePsi(string thumbprint)
     {
         return new ProcessStartInfo
         {
             FileName = "certutil",
-            Arguments = $"-delstore Root \"{thumbprint}\"",
-            UseShellExecute = true,
-            Verb = "runas",
+            Arguments = $"-user -delstore Root \"{thumbprint}\"",
+            UseShellExecute = false,
             CreateNoWindow = true,
         };
     }

@@ -9,11 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math/big"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -91,14 +93,29 @@ func (c *CA) GetCertificate(chi *tls.ClientHelloInfo) (*tls.Certificate, error) 
 }
 
 func (c *CA) signLeaf(host string) (*tls.Certificate, error) {
-	c.mu.Lock()
+	// Read cache status under lock, release before doing the (expensive)
+	// serial/keypair generation. The cache is informational only — the
+	// comment in the previous version said "Stale cache handled implicitly
+	// by AlwaysExpireIn; return a fresh copy with current NotAfter but
+	// reuse the keypair", but in practice the code ALWAYS generated a
+	// fresh keypair and serial even on cache hit, so the cache is only
+	// used to track when we last signed a leaf for a given host.
+	//
+	// Critical: do NOT acquire c.mu twice in this function in a way that
+	// could double-Unlock. The previous implementation had a bug where the
+	// cache-hit branch did `c.mu.Unlock()` then fell through to a second
+	// `c.mu.Unlock()` at the bottom of the cache-check block, producing
+	// `sync: unlock of unlocked mutex` — a runtime fatal (NOT a panic, so
+	// recover() cannot catch it). That fatal crashed the sidecar with
+	// exit code 2 on every CONNECT to a host it had seen before, which
+	// manifested as Chromium getting ERR_PROXY_CONNECTION_FAILED on the
+	// second navigation of a profile session.
 	now := time.Now()
-	if last, ok := c.issuedBy[host]; ok && now.Sub(last) < 10*time.Minute {
-		c.mu.Unlock()
-		// Stale cache handled implicitly by AlwaysExpireIn; return a fresh
-		// copy with current NotAfter but reuse the keypair.
-	}
+	c.mu.Lock()
+	_, cacheHit := c.issuedBy[host]
 	c.mu.Unlock()
+
+	_ = cacheHit // reserved for future per-host keypair reuse
 
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
@@ -165,7 +182,34 @@ type Handler struct {
 //  2. Spin up a TLS listener on an ephemeral port that serves leaf certs.
 //  3. Hijack the client, do the native TLS handshake, then start uTLS dial
 //     to the real target. Bidirectional pipe between the two.
+//
+// Panic recovery: each CONNECT runs in its own goroutine spawned by
+// http.Server. Without recover() a panic in signLeaf, tls.Handshake, or the
+// bidirectional pipe would CRASH THE ENTIRE SIDECAR PROCESS (in Go, an
+// unrecovered panic in any goroutine exits the program with code 2). That
+// would kill the sidecar mid-session and break every subsequent request
+// from Chromium (ERR_PROXY_CONNECTION_FAILED). We wrap the body so panics
+// are logged with stack trace and the bad connection is closed, while the
+// sidecar keeps serving.
 func (h *Handler) HandleConnect(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			host := r.Host
+			if r.URL != nil {
+				host = r.URL.Host
+			}
+			log.Printf("PANIC in HandleConnect host=%s: %v\n%s", host, rec, debug.Stack())
+			// Try to write an HTTP error if we haven't hijacked yet.
+			// After Hijack() succeeds, writing to w would corrupt the
+			// hijacked socket, so we swallow that case.
+			defer func() { _ = recover() }()
+			func() {
+				defer func() { _ = recover() }()
+				http.Error(w, "sidecar: internal error", http.StatusInternalServerError)
+			}()
+		}
+	}()
+
 	host := r.URL.Host
 	if host == "" {
 		host = r.Host

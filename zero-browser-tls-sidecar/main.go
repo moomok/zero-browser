@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"sync"
 	"syscall"
 	"time"
@@ -21,6 +22,23 @@ import (
 	"github.com/moomok/zero-browser-tls-sidecar/health"
 	"github.com/moomok/zero-browser-tls-sidecar/mitm"
 )
+
+// safeGo runs f in a goroutine that recovers from panics. Without this, a
+// panic in any of the background goroutines (health server, serve loop,
+// handler goroutines) would crash the entire sidecar process (exit code 2),
+// which would in turn break Chromium's proxy connection on the next request
+// with ERR_PROXY_CONNECTION_FAILED. The session-level handle in C# would
+// then have to wait for /health to time out and tear down the profile.
+func safeGo(name string, f func()) {
+	go func() {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("PANIC in %s: %v\n%s", name, rec, debug.Stack())
+			}
+		}()
+		f()
+	}()
+}
 
 type cliArgs struct {
 	port          int
@@ -137,11 +155,11 @@ func main() {
 		Addr:    fmt.Sprintf("127.0.0.1:%d", args.port+1),
 		Handler: health.New(args.profileID, template.ID),
 	}
-	go func() {
+	safeGo("health_server", func() {
 		if err := healthSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			structuredLog(map[string]any{"event": "health_error", "error": err.Error()})
 		}
-	}()
+	})
 
 	server := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -157,7 +175,7 @@ func main() {
 		TLSConfig: &tls.Config{GetCertificate: ca.GetCertificate}, // unused for CONNECT, kept defensive
 	}
 
-	go func() {
+	safeGo("serve_loop", func() {
 		structuredLog(map[string]any{
 			"event":     "ready",
 			"profile":   args.profileID,
@@ -168,7 +186,7 @@ func main() {
 		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			structuredLog(map[string]any{"event": "serve_error", "error": err.Error()})
 		}
-	}()
+	})
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)

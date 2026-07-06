@@ -69,7 +69,19 @@ public static class TlsSupport
         var exeName = Platform == "windows"
             ? "zero-browser-tls-sidecar.exe"
             : "zero-browser-tls-sidecar";
-        var arch = RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
+        // The sidecar is cross-compiled with Go, which uses the GOARCH naming
+        // convention (amd64, arm64, 386, arm). .NET's ProcessArchitecture uses
+        // different names (X64, X86, Arm, Arm64). Map between them so the
+        // directory layout from build.ps1 ({goos}-{goarch}) matches what we
+        // look up here.
+        var arch = RuntimeInformation.ProcessArchitecture switch
+        {
+            Architecture.X64   => "amd64",
+            Architecture.X86   => "386",
+            Architecture.Arm   => "arm",
+            Architecture.Arm64 => "arm64",
+            _                  => RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant(),
+        };
         // AppContext.BaseDirectory is the directory of the host .NET assembly.
         var baseDir = AppContext.BaseDirectory;
         return Path.Combine(baseDir, "vendor", "tls-sidecar", $"{Platform}-{arch}", exeName);
