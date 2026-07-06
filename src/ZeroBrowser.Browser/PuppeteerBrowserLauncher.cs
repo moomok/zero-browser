@@ -15,6 +15,8 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
 {
     private readonly FingerprintInjector _injector;
 
+    public string? LastWarning { get; private set; }
+
     public PuppeteerBrowserLauncher(FingerprintInjector injector)
     {
         _injector = injector;
@@ -22,6 +24,7 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
 
     public async Task<IBrowserSession> LaunchAsync(LaunchRequest request, CancellationToken ct = default)
     {
+        LastWarning = null;
         Directory.CreateDirectory(request.Profile.StoragePath);
 
         // Resolve which Chromium binary to launch. If the profile pins an
@@ -41,24 +44,23 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
         }
 
         // TLS fingerprint diversion via sidecar proxy.
+        // v0.3 NOTE: this path is force-disabled because CipherSuitesPolicy
+        // cannot produce browser-matching JA3 hashes on any platform. See
+        // TlsSupport.cs for the full rationale. The profile setting is still
+        // persisted (for future Go+uTLS sidecar) but never acted on here.
         Tls.TlsSidecarProxy? sidecar = null;
         var tlsMode = request.Profile.TlsDiversionMode ?? "none";
         if (!string.IsNullOrWhiteSpace(tlsMode) && tlsMode != "none")
         {
-            try
-            {
-                // Normalize mode to match User-Agent for consistency.
-                tlsMode = Tls.TlsFingerprintPool.NormalizeToUserAgent(tlsMode, request.Fingerprint.UserAgent);
-                sidecar = await Tls.TlsSidecarProxy.CreateAsync(
-                    request.Profile.FingerprintSeed, tlsMode, ct).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                // Fallback: if sidecar fails to start, run without TLS diversion.
-                System.Diagnostics.Debug.WriteLine($"TLS sidecar start failed: {ex.Message}");
-                sidecar = null;
-                tlsMode = "none";
-            }
+            var requestedMode = tlsMode;
+            tlsMode = "none";
+            var warning = Tls.TlsSupport.IsAvailable
+                ? $"TLS diversion mode '{requestedMode}' requested but sidecar failed to start; launching without diversion."
+                : $"TLS diversion mode '{requestedMode}' requested but disabled on this platform ({Tls.TlsSupport.Platform}). " +
+                  $"CipherSuitesPolicy cannot produce browser-matching JA3 hashes — launching without diversion. " +
+                  $"See README for the planned Go+uTLS sidecar.";
+            LastWarning = warning;
+            System.Diagnostics.Debug.WriteLine("TLS diversion: " + warning);
         }
 
         var args = new List<string>

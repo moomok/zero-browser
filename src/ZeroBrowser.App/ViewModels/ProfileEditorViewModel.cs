@@ -46,6 +46,8 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
     [ObservableProperty] private TlsOption? _selectedTls;
     [ObservableProperty] private string _tlsStatusMessage = string.Empty;
 
+    [ObservableProperty] private string _tlsLimitationMessage = string.Empty;
+
     // Seed history — previous seeds the user can switch back to.
     public ObservableCollection<SeedHistoryItemViewModel> SeedHistory { get; } = new();
     [ObservableProperty] private string _seedHistoryStatusMessage = string.Empty;
@@ -147,6 +149,13 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
         var currentTls = (_profile.TlsDiversionMode ?? "none").ToLowerInvariant();
         SelectedTls = TlsOptions.FirstOrDefault(t => t.Mode == currentTls) ?? TlsOptions[0];
 
+        TlsLimitationMessage =
+            $"⚠ TLS/JA3 diversion is currently disabled in this build. " +
+            $"CipherSuitesPolicy cannot control cipher ORDER or ClientHello extensions " +
+            $"(both hashed by JA3), so the produced fingerprint would not match any real " +
+            $"browser and would be flagged as a bot. Settings are saved for a future Go+uTLS " +
+            $"sidecar. See README.";
+
         UpdatePreview();
         RefreshToken();
     }
@@ -235,6 +244,14 @@ public sealed partial class ProfileEditorViewModel : ObservableObject
             if (mode == "none")
             {
                 TlsStatusMessage = "Select a non-off mode first.";
+                return;
+            }
+
+            if (!ZeroBrowser.Browser.Tls.TlsSupport.IsAvailable)
+            {
+                TlsStatusMessage = $"TLS diversion is disabled in this build ({ZeroBrowser.Browser.Tls.TlsSupport.Platform}). " +
+                                   $"Cipher suite order + ClientHello extensions can't be controlled by .NET — " +
+                                   $"JA3 hash would not match any real browser. See README.";
                 return;
             }
 

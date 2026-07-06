@@ -148,7 +148,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 Headless: false,
                 Extensions: extensions));
             item.Status = session.IsRunning ? "running" : "exited";
-            StatusMessage = $"Launched {item.Name}";
+            var warning = _launcher.LastWarning;
+            StatusMessage = warning is null
+                ? $"Launched {item.Name}"
+                : $"Launched {item.Name} — ⚠ {warning}";
 
             // Persist last-used
             profile.LastUsedAt = DateTimeOffset.UtcNow;

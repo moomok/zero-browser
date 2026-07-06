@@ -24,7 +24,7 @@ Inspirasi: Multilogin / GoLogin / AdsPower / Dolphin Anty / Kameleo — versi op
 - ✅ **68 unit tests passing** (Win/Mac/Linux)
 
 ### Identity & Security
-- ✅ **TLS / JA3 fingerprint diversion** — in-process sidecar proxy per profile, derives TLS ClientHello (cipher suite order) from seed-based pool (Chrome/Firefox/Safari/Edge/Randomized). User-Agent and TLS mode are auto-normalized for consistency.
+- ⚠ **TLS / JA3 fingerprint diversion — DISABLED in this build.** The v0.3 implementation relied on `System.Net.Security.CipherSuitesPolicy`, which has two fundamental limitations: (1) it cannot control cipher suite **order** in the ClientHello, and (2) it cannot override ClientHello extensions. Both are hashed into JA3, so the resulting fingerprint would not match any real browser and would itself become a detection signal. On Windows, the API additionally throws `PlatformNotSupportedException`. A future v0.4 will swap this for a Go+uTLS sidecar (`github.com/refraction-networking/utls`) that constructs the ClientHello byte-for-byte. The profile setting is still persisted; the UI shows a red banner explaining the limitation.
 - ✅ **Master password lock di app start** (Argon2id-derived SecretBox; sensitive data di disk dienkripsi)
 - ✅ **Encrypted fingerprint token** — format portable `base64_key|base64_payload|base64_iv|flags|ver` (AES-256-GCM)
 - ✅ **Proxy manager + bulk import** + **connectivity test** (Test / Test All via httpbin.org/ip)
@@ -323,7 +323,7 @@ Pastikan tidak ada warning "Suspicious", IP/browser/system info konsisten.
 
 ## Catatan Realistis (Penting!)
 
-1. **JA3/TLS fingerprint**: sudah ada **TLS sidecar proxy in-process** yang derives cipher suite order dari seed. Ini diversifikasi TLS ClientHello per profil di layer proxy. Browser lain yang bypass sidecar (mis. Chromium fallback) masih expose baseline Chromium TLS — pastikan tidak ada leak.
+1. **JA3/TLS fingerprint**: **disabled in v0.3** (lihat Status). `CipherSuitesPolicy` tidak cukup — perlu Go+uTLS sidecar untuk kontrol penuh atas ClientHello. Track di roadmap v0.4.
 
 2. **Anti-bot enterprise**: jangan ekspektasi 100% lolos Cloudflare Bot Management / Datadome / PerimeterX / Akamai. Vendor anti-detect komersial pun kucing-tikusan. Target realistis: lolos creepjs / iphey / pixelscan / browserleaks.
 

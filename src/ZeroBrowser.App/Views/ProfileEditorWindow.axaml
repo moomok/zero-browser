@@ -97,6 +97,12 @@
                     </StackPanel>
                     <TextBlock Text="{Binding TlsStatusMessage}" FontSize="11" Opacity="0.7" Margin="0,6,0,0"
                                IsVisible="{Binding TlsStatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+                    <Border Background="#33FF6B6B" BorderBrush="#FFB00020" BorderThickness="1"
+                            CornerRadius="4" Padding="8,6" Margin="0,8,0,0">
+                        <TextBlock Text="{Binding TlsLimitationMessage}"
+                                   TextWrapping="Wrap" FontSize="11" Foreground="#FFB00020"/>
+                    </Border>
                 </StackPanel>
                         <ComboBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:RotationOption">
