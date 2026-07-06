@@ -323,13 +323,49 @@ Pastikan tidak ada warning "Suspicious", IP/browser/system info konsisten.
 
 ## Catatan Realistis (Penting!)
 
-1. **JA3/TLS fingerprint**: Chromium standar punya TLS handshake yang sama untuk semua profil di mesin yang sama. Untuk diversifikasi, butuh patch source Chromium atau tunnel via `curl-impersonate` / `mitmproxy` dengan TLS fingerprint custom. **Roadmap**, bukan MVP.
+1. **JA3/TLS fingerprint**: sudah ada **TLS sidecar proxy in-process** yang derives cipher suite order dari seed. Ini diversifikasi TLS ClientHello per profil di layer proxy. Browser lain yang bypass sidecar (mis. Chromium fallback) masih expose baseline Chromium TLS — pastikan tidak ada leak.
 
 2. **Anti-bot enterprise**: jangan ekspektasi 100% lolos Cloudflare Bot Management / Datadome / PerimeterX / Akamai. Vendor anti-detect komersial pun kucing-tikusan. Target realistis: lolos creepjs / iphey / pixelscan / browserleaks.
 
 3. **Maintenance dataset**: teknik anti-detect rentan break setiap Chrome major (~6 minggu sekali). Update `FingerprintDataset.cs` setiap update Chrome. Sekarang adapter support Chrome 126-150; kalau sudah lewat 150 mungkin perlu aggiornare.
 
 4. **Legal**: tool legal untuk privasi & multi-account TOS-compliant. **Tidak** legal untuk fraud, fake review, ad-fraud, ban evasion, dll. Periksa TOS platform target sebelum pakai.
+
+---
+
+### 1. Build
+```pwsh
+dotnet build ZeroBrowser.sln -c Release
+```
+
+### 2. Publish desktop (Windows x64)
+```pwsh
+dotnet publish ZeroBrowser.Desktop -c Release -r win-x64 --self-contained true `
+  /p:PublishSingleFile=true /p:DebugType=embedded
+```
+Output: `ZeroBrowser.Desktop/bin/Release/net8.0/win-x64/publish/ZeroBrowser.Desktop.exe`
+
+### 3. Install Chromium
+Karena redistribusi Chromium binary bukan di-bundle (lisensi), download manual via script:
+```pwsh
+.\scripts\install-chromium.ps1
+# atau pakai versi spesifik:
+.\scripts\install-chromium.ps1 -Version 138.0.7204.157
+```
+Hasil: `vendor/chromium/chrome-win/chrome.exe` (auto-detected oleh `BrowserDetector`). Bisa juga pakai Chrome / Brave / Edge sistem — lihat "Browser Detector" di Settings.
+
+### 4. Run
+```pwsh
+.\ZeroBrowser.Desktop\bin\Release\net8.0\win-x64\publish\ZeroBrowser.Desktop.exe
+```
+Pertama kali: set master password → otomatis derived ke SecretBox untuk encrypt proxy password & secret lain di DB.
+
+### Linux / macOS
+```pwsh
+dotnet publish ZeroBrowser.Desktop -c Release -r linux-x64 --self-contained true /p:PublishSingleFile=true
+dotnet publish ZeroBrowser.Desktop -c Release -r osx-arm64 --self-contained true /p:PublishSingleFile=true
+```
+Chromium auto-detect lewat `BrowserDetector` (Chrome/Brave/Edge di macOS, chromium / google-chrome di Linux).
 
 ---
 
