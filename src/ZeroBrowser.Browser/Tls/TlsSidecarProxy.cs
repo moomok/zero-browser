@@ -129,9 +129,13 @@ public sealed class TlsSidecarProxy : IAsyncDisposable
                         TargetHost = host,
                         EnabledSslProtocols = _sslProtocols,
                         CertificateRevocationCheckMode = X509RevocationMode.NoCheck,
-                        CipherSuitesPolicy = new CipherSuitesPolicy(_cipherSuites),
                         RemoteCertificateValidationCallback = (_, _, _, _) => true
                     };
+                    if (!OperatingSystem.IsWindows())
+                    {
+                        // CipherSuitesPolicy is a no-op / unsupported API on Windows (SChannel).
+                        sslOptions.CipherSuitesPolicy = new CipherSuitesPolicy(_cipherSuites);
+                    }
                     using var sslStream = new SslStream(target.GetStream(), false);
                     await sslStream.AuthenticateAsClientAsync(sslOptions, ct);
                     await PipeStreamToSsl(clientStream, sslStream, ct);

@@ -19,13 +19,20 @@ public sealed partial class AutomationRunnerViewModel : ObservableObject
     private Window? _owner;
     private Process? _currentProcess;
 
+    /// <summary>
+    /// CDP WebSocket endpoint of the last launched browser session, set by the caller.
+    /// Falls back to $env:ZB_PROFILE_CDP_URL when unset.
+    /// </summary>
+    public string? CdpWebSocketUrl { get; set; }
+
     public void SetOwner(Window owner) => _owner = owner;
 
     [RelayCommand]
     private async Task BrowseScriptAsync()
     {
         if (_owner is null) return;
-        var topLevel = TopLevel.GetTopLevel(_owner) ?? (TopLevel?)_owner;
+        var topLevel = TopLevel.GetTopLevel(_owner);
+        if (topLevel is null) return;
         var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = "Select Node.js script",
@@ -149,10 +156,11 @@ public sealed partial class AutomationRunnerViewModel : ObservableObject
 
     /// <summary>
     /// Best-effort lookup for the most recent launched browser's CDP URL.
-    /// Currently this requires the user to set $env:ZB_PROFILE_CDP_URL before launching.
+    /// Prefers the URL captured at launch time; falls back to $env:ZB_PROFILE_CDP_URL.
     /// </summary>
-    private static string? GetActiveCdpWebSocketUrl()
+    private string? GetActiveCdpWebSocketUrl()
     {
+        if (!string.IsNullOrWhiteSpace(CdpWebSocketUrl)) return CdpWebSocketUrl;
         var env = Environment.GetEnvironmentVariable("ZB_PROFILE_CDP_URL");
         return string.IsNullOrWhiteSpace(env) ? null : env;
     }

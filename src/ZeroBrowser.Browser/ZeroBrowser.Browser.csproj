@@ -15,4 +15,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="ZeroBrowser.Tests" />
+  </ItemGroup>
+
 </Project>

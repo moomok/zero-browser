@@ -27,5 +27,7 @@ public interface IBrowserSession : IAsyncDisposable
 {
     Profile Profile { get; }
     bool IsRunning { get; }
+    /// <summary>DevTools WebSocket endpoint of the running browser (for CDP attach), or null if unknown.</summary>
+    string? CdpWebSocketUrl { get; }
     Task CloseAsync();
 }

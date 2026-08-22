@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using ZeroBrowser.Core.Fingerprint;
 using ZeroBrowser.Core.Models;
 using ZeroBrowser.Storage.Cookies;
@@ -43,6 +45,18 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
             await fetcher.DownloadAsync().ConfigureAwait(false);
         }
 
+        // Tor-backed local profiles: bring the daemon up before anything else
+        // (TLS sidecar upstream and the SOCKS5 args below both need its endpoint).
+        (string host, int port)? torEndpoint = null;
+        if (request.Proxy is { Type: ProxyType.Tor } torProxy && IsLocalTorHost(torProxy.Host))
+        {
+            torEndpoint = await Tor.TorManager.Shared.EnsureRunningAsync(ct).ConfigureAwait(false);
+            var warn = Tor.TorManager.Shared.State == Tor.TorManager.TorState.RunningExternal
+                ? "using external tor daemon"
+                : null;
+            if (warn is not null) LastWarning = warn;
+        }
+
         // TLS fingerprint diversion via external Go+uTLS sidecar (v0.4).
         // The legacy in-process CipherSuitesPolicy implementation was retired
         // because it cannot produce browser-matching JA3 hashes (see commit
@@ -65,7 +79,11 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
                 else
                 {
                     var sidecarPort = FindFreeTcpPort();
-                    var upstream = request.Proxy is null ? null : BuildUpstreamProxyUrl(request.Proxy);
+                    var upstream = request.Proxy is null
+                        ? null
+                        : request.Proxy.Type == ProxyType.Tor
+                            ? BuildTorUpstreamUrl(request, torEndpoint ?? (request.Proxy.Host, request.Proxy.Port))
+                            : BuildUpstreamProxyUrl(request.Proxy);
                     var caPaths = EnsureLocalCaAsync().GetAwaiter().GetResult();
                     tlsSidecar = await Tls.SidecarProcess.StartAsync(
                         sidecarPath: sidecarPath,
@@ -124,29 +142,44 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
                 .Replace("\n", "").Replace("\r", "");
             if (string.IsNullOrWhiteSpace(proxyHost) || request.Proxy.Port <= 0 || request.Proxy.Port > 65535)
                 throw new ArgumentException("Invalid proxy host or port.");
-            var scheme = request.Proxy.Type switch
-            {
-                ProxyType.Http   => "http",
-                ProxyType.Https  => "https",
-                ProxyType.Socks5 => "socks5",
-                _ => "http"
-            };
 
-            // For SOCKS5 with auth, credentials must go in the URL because
-            // page.AuthenticateAsync only handles HTTP 407 proxy-auth challenges.
-            // HTTP/HTTPS proxies use the 407 challenge flow via AuthenticateAsync.
-            if (request.Proxy.Type == ProxyType.Socks5
-                && request.Proxy.Username is not null
-                && request.Proxy.Password is not null)
+            if (request.Proxy.Type == ProxyType.Tor)
             {
-                var socksUser = Uri.EscapeDataString(request.Proxy.Username);
-                var socksPass = Uri.EscapeDataString(request.Proxy.Password);
-                args.Add($"--proxy-server=socks5://{socksUser}:{socksPass}@{proxyHost}:{request.Proxy.Port}");
+                AppendTorProxyArgs(args, request, torEndpoint);
             }
             else
             {
-                args.Add($"--proxy-server={scheme}://{proxyHost}:{request.Proxy.Port}");
+                var scheme = request.Proxy.Type switch
+                {
+                    ProxyType.Http   => "http",
+                    ProxyType.Https  => "https",
+                    ProxyType.Socks5 => "socks5",
+                    _ => "http"
+                };
+
+                // For SOCKS5 with auth, credentials must go in the URL because
+                // page.AuthenticateAsync only handles HTTP 407 proxy-auth challenges.
+                // HTTP/HTTPS proxies use the 407 challenge flow via AuthenticateAsync.
+                if (request.Proxy.Type == ProxyType.Socks5
+                    && request.Proxy.Username is not null
+                    && request.Proxy.Password is not null)
+                {
+                    var socksUser = Uri.EscapeDataString(request.Proxy.Username);
+                    var socksPass = Uri.EscapeDataString(request.Proxy.Password);
+                    args.Add($"--proxy-server=socks5://{socksUser}:{socksPass}@{proxyHost}:{request.Proxy.Port}");
+                }
+                else
+                {
+                    args.Add($"--proxy-server={scheme}://{proxyHost}:{request.Proxy.Port}");
+                }
             }
+        }
+
+        // Tor leak hardening applies in both routing modes (direct SOCKS5 and
+        // via the TLS sidecar's upstream).
+        if (request.Proxy?.Type == ProxyType.Tor)
+        {
+            AppendTorLeakPreventionArgs(args);
         }
 
         // Sideload extensions: only include enabled ones whose folders still
@@ -325,6 +358,63 @@ public sealed class PuppeteerBrowserLauncher : IBrowserLauncher
     }
 
     /// <summary>
+    /// Upstream proxy URL for the TLS sidecar when the profile routes through Tor.
+    /// Embeds the profile's isolation credentials so the sidecar's traffic shares
+    /// this profile's dedicated circuit chain.
+    /// </summary>
+    private static string BuildTorUpstreamUrl(LaunchRequest request, (string host, int port) endpoint)
+    {
+        var proxy = request.Proxy!;
+        if (string.IsNullOrWhiteSpace(proxy.Host) || proxy.Port <= 0 || proxy.Port > 65535)
+            throw new ArgumentException("Invalid Tor proxy host or port.");
+        var (user, pass) = TorIsolationCredentials(request.Profile);
+        return $"socks5://{Uri.EscapeDataString(user)}:{Uri.EscapeDataString(pass)}@{endpoint.host}:{endpoint.port}";
+    }
+
+    private void AppendTorProxyArgs(
+        List<string> args, LaunchRequest request, (string host, int port)? torEndpoint)
+    {
+        var isLocalTor = request.Proxy is not null && IsLocalTorHost(request.Proxy.Host);
+        var (host, port) = isLocalTor && torEndpoint is not null
+            ? torEndpoint.Value
+            : (request.Proxy!.Host, request.Proxy!.Port);
+
+        var (user, pass) = TorIsolationCredentials(request.Profile);
+        args.Add($"--proxy-server=socks5://{Uri.EscapeDataString(user)}:{Uri.EscapeDataString(pass)}@{host}:{port}");
+    }
+
+    internal static bool IsLocalTorHost(string? host) =>
+        host is "127.0.0.1" or "localhost" or "::1" or "[::1]" || host?.StartsWith("127.") == true;
+
+    /// <summary>
+    /// Leak-prevention flags applied to every Tor-backed profile (direct SOCKS5
+    /// routing and TLS-sidecar composition alike). Local DNS resolution fails
+    /// outright so hostnames are resolved on the tor exit; non-proxied UDP
+    /// (WebRTC bypass) and QUIC are disabled.
+    /// Loopback stays implicitly bypassed so CDP + the TLS sidecar keep working.
+    /// </summary>
+    private static void AppendTorLeakPreventionArgs(List<string> args)
+    {
+        args.Add("--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1, localhost, [::1]");
+        args.Add("--disable-non-proxied-udp");
+        args.Add("--disable-quic");
+    }
+
+    /// <summary>
+    /// Deterministic SOCKS5 credentials used as tor circuit-isolation keys.
+    /// Any unique user:pass pair makes tor maintain separate circuits; deriving
+    /// them from profile id+seed keeps them stable across launches without storage.
+    /// </summary>
+    internal static (string user, string password) TorIsolationCredentials(Profile profile)
+    {
+        var user = $"zb-{profile.Id:N}";
+        var hash = SHA256.HashData(
+            Encoding.UTF8.GetBytes($"zerobrowser-tor-isolation:{profile.Id:N}:{profile.FingerprintSeed}"));
+        var password = Convert.ToHexString(hash)[..24].ToLowerInvariant();
+        return (user, password);
+    }
+
+    /// <summary>
     /// Ensure a local Root CA exists and return its cert + key paths.
     /// The CA is generated on first use by <see cref="Tls.TlsCertificateAuthority"/>
     /// (same one that the C# code already uses for the v0.3 Test button).
@@ -359,6 +449,15 @@ internal sealed class PuppeteerBrowserSession : IBrowserSession
     }
 
     public bool IsRunning => !_browser.IsClosed;
+
+    public string? CdpWebSocketUrl
+    {
+        get
+        {
+            try { return _browser.IsClosed ? null : _browser.WebSocketEndpoint; }
+            catch { return null; }
+        }
+    }
 
     public async Task CloseAsync()
     {

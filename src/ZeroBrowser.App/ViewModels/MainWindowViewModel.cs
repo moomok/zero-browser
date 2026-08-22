@@ -19,6 +19,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private readonly FingerprintGenerator _generator;
     private readonly IBrowserLauncher _launcher;
 
+    /// <summary>CDP WebSocket URL of the most recently launched browser session, if any.</summary>
+    private string? _lastCdpWebSocketUrl;
+
     public ObservableCollection<ProfileItemViewModel> Profiles { get; } = new();
 
     [ObservableProperty] private string _statusMessage = "Ready";
@@ -148,6 +151,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 Headless: false,
                 Extensions: extensions));
             item.Status = session.IsRunning ? "running" : "exited";
+            _lastCdpWebSocketUrl = session.CdpWebSocketUrl;
             var warning = _launcher.LastWarning;
             StatusMessage = warning is null
                 ? $"Launched {item.Name}"
@@ -293,14 +297,20 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task RunAutomationScriptAsync(ProfileItemViewModel? item)
+    private void OpenAutomationRunner()
     {
-        if (item is null) return;
-        // For now, expose a placeholder: the command expects Node.js and a script path.
-        // In a full integration, we'd watch the launched browser for its CDP endpoint.
-        // Here we show status and refer user to launch first.
-        StatusMessage = "Launch the profile with 'Launch' first, then run your script. " +
-                        "(Use environment variable CDP_WS_URL in your Playwright/Puppeteer script.)";
-        await Task.CompletedTask;
+        var window = new AutomationRunnerWindow
+        {
+            DataContext = new AutomationRunnerViewModel { CdpWebSocketUrl = _lastCdpWebSocketUrl }
+        };
+        if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
+            && desktop.MainWindow is Window owner)
+        {
+            window.Show(owner);
+        }
+        else
+        {
+            window.Show();
+        }
     }
 }

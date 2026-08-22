@@ -20,5 +20,8 @@ public enum ProxyType
 {
     Http,
     Https,
-    Socks5
+    Socks5,
+    /// <summary>Tor SOCKS5 (127.0.0.1:9050 by default). Managed by <c>TorManager</c>;
+    /// each profile gets isolated circuits via unique SOCKS5 credentials.</summary>
+    Tor
 }
