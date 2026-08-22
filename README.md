@@ -21,7 +21,7 @@ Inspirasi: Multilogin / GoLogin / AdsPower / Dolphin Anty / Kameleo — versi op
 - ✅ Per-profile user-data-dir, proxy server + auth, timezone emulation
 - ✅ Storage SQLite + AES-256-GCM + Argon2id
 - ✅ Avalonia UI 12 (cross-platform native, Fluent Design)
-- ✅ **68 unit tests passing** (Win/Mac/Linux)
+- ✅ **115 unit tests passing** (Win/Mac/Linux)
 
 ### Identity & Security
 - 🟡 **TLS / JA3 fingerprint diversion via Go+uTLS sidecar — v0.4 alpha.** Replaces the in-process `CipherSuitesPolicy` (retired, see `148e8b2`) with an external `zero-browser-tls-sidecar` Go binary that uses `github.com/refraction-networking/utls` to construct the ClientHello byte-for-byte. Same code path on Windows / macOS / Linux. Verified empirically on Windows + Chrome 106 (see verification report below); other templates + platforms need user validation before this can be marked ✅.
@@ -44,13 +44,22 @@ Inspirasi: Multilogin / GoLogin / AdsPower / Dolphin Anty / Kameleo — versi op
 ### Performance
 - ✅ **Non-blocking UI** — semua DB query, fingerprint generation, dan filesystem scan (BrowserDetector.Detect) dipindah ke background thread; UI tetap responsif saat buat/list/launch profil
 
+### Automation
+- ✅ **Automation runner UI** — tombol "Automate" di toolbar membuka runner window: pilih script Node.js (.js/.mjs/.cjs), live stdout/stderr, Run/Cancel/Clear. Script menerima CDP WebSocket URL sesi browser terakhir via `$env:CDP_WS_URL` (attach ke profil yang sudah jalan, tanpa launch browser baru).
+
+### Tor
+- ✅ **Full Tor manager** — panel 🧅 Tor di Proxy Manager: Start/Stop daemon, bootstrap progress bar live (parse log `Bootstrapped X%`), **New Identity** (SIGNAL NEWNYM via control port cookie-auth), **Check exit IP** (SOCKS5 → check.torproject.org).
+- ✅ **Circuit isolation per profil** — tiap profil Tor dapat kredensial SOCKS5 unik deterministik (`zb-<profile-id>` + hash id:seed) → tor membangun rantai relay terpisah per identitas; antar profil tidak bisa dikorelasikan di jaringan.
+- ✅ **Anti-leak** — DNS dipaksa resolve di tor exit (`--host-resolver-rules=MAP * ~NOTFOUND`), WebRTC non-proxied UDP + QUIC dimatikan. Loopback tetap bypass agar CDP & TLS sidecar jalan.
+- ✅ **Auto-detect binary** — `ZB_TOR_PATH` env var → PATH → lokasi well-known (Tor Browser bundle, apt/brew/snap). Jika sudah ada tor eksternal di 127.0.0.1:9050 (systemd/docker/Tor Browser), dipakai apa adanya.
+- ✅ **Komposisi TLS diversion + Tor** — sidecar uTLS bisa chain ke tor sebagai upstream SOCKS5 dengan kredensial isolasi profil yang sama.
+
 ### Dataset
 - ✅ **Chrome 145-150** (current stable Juli 2026: 150.0.7871)
 - ✅ **GPU combos komplet** — RTX 40/50 (4070/4090/5070/5090), RX 7600/7800 XT/9070 XT, Apple M4/M4 Pro/M4 Max, Intel Arc A770
 - ✅ **Sec-CH-UA grease brand** fix per milestone range (126-130, 131-134, 135-144, 145+)
 
 ### Belum (roadmap)
-- [ ] Automation runner UI (Runner + Node.js CDP attach sudah dibuild; tinggal bind UI file picker)
 - [ ] Code signing + auto-update
 - [ ] TLS cert-pinning bypass list per domain
 
